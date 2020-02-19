@@ -1,0 +1,301 @@
+Attribute VB_Name = "Analysis"
+Sub evaG_CNV_analysis()
+Application.ScreenUpdating = False
+
+'Remove last 3 characters from Sample ID in DNA Dilutions sheet
+Dim i As Integer
+Dim sampleID As String
+Worksheets("DNA Dilutions").Activate
+i = 4
+Do While i < 25
+    sampleID = Left(Cells(i, 1), 9)
+    If sampleID = "" Then
+        Exit Do
+    End If
+    Range("A" & i).Value = sampleID
+    i = i + 1
+Loop
+
+'Check to see if reference amplicon is specified
+Dim refAmplicon As String
+Worksheets("PCR").Activate
+i = 5
+Do While i <= 16
+    If i = 15 And refAmplicon = "" Then
+        MsgBox "Specify a reference amplicon on the PCR tab and re-run Analysis macro"
+        Exit Sub
+    ElseIf Cells(i, 2) = "Yes" And refAmplicon = "" Then
+        refAmplicon = Cells(i, 1)
+        MsgBox "Reference amplicon for this batch is " & refAmplicon
+    ElseIf Cells(i, 2) = "Yes" And refAmplicon <> "" Then
+        MsgBox "Two amplicons have been selected as references. Only one amplicon can be used."
+        Exit Sub
+    End If
+    i = i + 1
+Loop
+
+Dim dateMacroRun As String
+Dim fileDate As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+fileDate = Format(DateTime.Now, "yyyymmdd")
+
+'Set the default folder path
+ChDir "X:\STARLIMS\Genotyping\ddPCR genotyping\ddPCR Output files"
+'ChDir "X:\Personal folders\Ben Bunce\Projects\Excel Macros and VBA\ddPCR EvaGreen\data"
+
+'Open file
+Dim fileToOpen As String
+Dim relativePath As String
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+Dim workBatchNum As String
+
+Dim evaWorksheet As Workbook
+Dim quantasoftFile As Workbook
+
+Set evaWorksheet = ActiveWorkbook
+
+fileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+If fileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    Exit Sub
+Else
+    Workbooks.Open Filename:=fileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+        
+    Set quantasoftFile = ActiveWorkbook
+    
+    Range("A1:BK500").Copy
+    evaWorksheet.Worksheets("RawData").Range("A1").PasteSpecial
+    evaWorksheet.Worksheets("Analysis").Range("A1").PasteSpecial
+    quantasoftFile.Close
+End If
+
+
+'Delete unwanted columns
+Range("AQ:BK").EntireColumn.Delete
+Range("W:AO").EntireColumn.Delete
+Range("Q:U").EntireColumn.Delete
+Range("I:N").EntireColumn.Delete
+Range("G1").EntireColumn.Delete
+Range("B:C").EntireColumn.Delete
+
+'Insert new columns and set headers
+Range("C:E").EntireColumn.Insert
+Range("C1").Value = "Surname"
+Range("D1").Value = "Forename"
+Range("E1").Value = "Gender"
+Range("M1").Value = "AverageConcentration"
+Range("N1").Value = "Ratio"
+Range("O1").Value = "Final Result"
+Range("P1").Value = "Comments"
+Range("R1").Value = "Operators"
+
+'Get GT's initials
+Dim operator As String
+operator = InputBox("Enter initials of GT analysing batch")
+
+
+'#Need to sort by well number to make sure all patients are in the correct order
+Range("A:B").EntireColumn.Insert
+i = 2
+Do While Cells(i, 3) <> ""
+    Range("A" & i).FormulaR1C1 = "=LEFT(R[0]C[+2],1)"
+    Range("B" & i).FormulaR1C1 = "=RIGHT(R[0]C[+1],2)"
+    i = i + 1
+Loop
+
+Dim analysis_ws As Worksheet: Set analysis_ws = evaWorksheet.Worksheets("Analysis")
+
+With analysis_ws.Sort
+    .SortFields.Clear
+    .SortFields.Add Key:=analysis_ws.Range("B2"), Order:=xlAscending
+    .SortFields.Add Key:=analysis_ws.Range("A2"), Order:=xlAscending
+    .SetRange analysis_ws.Range("A2:Z500")
+    .Header = xlNo
+    .Apply
+End With
+
+Range("A:B").EntireColumn.Delete
+
+'Calulate last batch row
+Dim lastRow As Integer
+Dim cellValue As String
+cellValue = "Something"
+i = 1
+Do While cellValue <> ""
+    cellValue = Cells(i, 1).Text
+    If cellValue = "" Then
+        lastRow = i
+    End If
+    i = i + 1
+Loop
+
+'Insert formulas: averages (col L)
+Dim sampleCount, sampleStart As Integer
+sampleCount = 1
+sampleStart = 2
+i = 2
+Do While i < lastRow
+    cellValue = Cells(i, 7).Value
+    If cellValue = Cells(i + 1, 7).Value Then
+        sampleCount = sampleCount + 1
+    Else
+        Range("M" & i).Formula = "=AVERAGE(" & Range("H" & sampleStart & ":H" & i).Address(False, False) & ")"
+        If IsError(Range("M" & i)) = True Then
+            Range("M" & i).Value = 0
+        End If
+        sampleStart = i + 1
+        sampleCount = 1
+    End If
+    i = i + 1
+Loop
+
+'Locate ref amplicon ratio row for each patient
+Dim refAmpPos As New Scripting.Dictionary
+
+i = 2
+Do While i < lastRow
+    cellValue = Cells(i, 1).Value
+    If Cells(i, 7).Value = refAmplicon And Cells(i, 13).Value <> "" Then
+        Debug.Print Cells(i, 2).Text, i
+        refAmpPos.Add Cells(i, 2).Text, i
+    End If
+    i = i + 1
+Loop
+
+'Calculate ratio using refAmpPos
+Dim relRefPos As Integer
+i = 2
+For Each pt In refAmpPos
+    Do While i < lastRow
+        If Cells(i, 2) = pt Then
+            If Cells(i, 13) <> "" Then
+                relRefPos = refAmpPos(pt) - i
+                Range("N" & i).FormulaR1C1 = "=FIXED(R[0]C[-1]/R[" & relRefPos & "]C[-1],2)"
+                If IsError(Range("N" & i)) = True Then
+                    Range("N" & i).Value = 0
+                End If
+            End If
+        Else
+            Exit Do
+        End If
+        i = i + 1
+    Loop
+Next
+
+ 
+'Add VLOOKUP for Surname and Forename
+Dim patientInfo As Range
+Set patientInfo = Worksheets("DNA Dilutions").Range("A3:G25")
+ThisWorkbook.Names.Add Name:="Patients", RefersTo:=patientInfo
+'Range("A3", Range("G" & Cells(Rows.Count, 1).End(xlUp).Row)).Name = "Patients"
+i = 2
+Do While i < lastRow
+    If Cells(i, 1).Value <> "" Then
+        sampleID = Left(Range("B" & i), 9)
+        On Error Resume Next
+        Range("C" & i).Value = Application.WorksheetFunction.VLookup(sampleID, Worksheets("DNA Dilutions").Range("Patients"), 2, False)
+        Range("D" & i).Value = Application.WorksheetFunction.VLookup(sampleID, Worksheets("DNA Dilutions").Range("Patients"), 3, False)
+        Range("E" & i).Value = Application.WorksheetFunction.VLookup(sampleID, Worksheets("DNA Dilutions").Range("Patients"), 7, False)
+        i = i + 1
+    Else
+        i = i + 1
+    End If
+Loop
+
+'Auto-call results using function
+Dim gender As String
+Dim targetType As String
+Dim target As String
+Dim ratio As Double
+Dim ratio_col As Range
+Dim finalResult As Range
+i = 2
+Do While i < lastRow
+    gender = Cells(i, 5).Value
+    Set finalResult = Range("O" & i)
+    targetType = Range("F" & i).Value
+    target = Range("G" & i).Value
+    ratio = Cells(i, 14)
+    Set ratio_col = Range("N" & i)
+    
+    If IsNumeric(gender) Or IsNull(gender) Or gender = "" Then
+        gender = "No gender"
+    End If
+
+    If ratio_col <> "" Then
+        finalResult = eFunctions.callResult(targetType, target, refAmplicon, False, gender, ratio)
+            With finalResult.Validation
+                .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="=Data!$D$2:$D$13"
+            End With
+    End If
+    
+    If finalResult.Value = "Mosaic" Or finalResult.Value = "Fail" Then
+        finalResult.Interior.Color = vbYellow
+    End If
+    
+    i = i + 1
+Loop
+   
+'Quality metric checks
+Worksheets("Analysis").Activate
+Dim concRng, posRng, totalRng As Range
+Dim concCond, posCond, totalCond As FormatCondition
+
+'Set the range on which conditional formatting is to be desired
+Set concRng = Range("H2:H" & lastRow)
+Set posRng = Range("I2:I" & lastRow)
+Set totalRng = Range("K2:K" & lastRow)
+
+'Defining criteria for each conditional format
+Set concCond = concRng.FormatConditions.Add(xlCellValue, xlNotBetween, "=100", "=900")
+Set posCond = posRng.FormatConditions.Add(xlCellValue, xlLess, "=1000")
+Set totalCond = totalRng.FormatConditions.Add(xlCellValue, xlLess, "=10000")
+
+'Specify the format to be applied for each condition
+With concCond
+ .Font.Color = vbRed
+ .Font.Bold = True
+End With
+
+With posCond
+  .Font.Color = vbRed
+  .Font.Bold = True
+End With
+
+With totalCond
+  .Font.Color = vbRed
+  .Font.Bold = True
+End With
+
+'Insert new row between different patients for easier reading
+Dim currentRow As String
+Dim nextRow As String
+i = 2
+Do While i < lastRow
+    currentRow = Range("B" & i).Value
+    nextRow = Range("B" & i + 1).Value
+    
+    If currentRow <> nextRow Then
+        Range("B" & i + 1).EntireRow.Insert
+        i = i + 1
+    End If
+    i = i + 1
+Loop
+
+'Additional Formatting
+Range("A1").EntireRow.Font.Bold = True
+Range("O1").EntireColumn.Font.Bold = True
+ActiveWindow.Zoom = 85
+
+'Save file
+Range("R2").Value = "Data analysis by: " & operator & " (" & dateMacroRun & ")"
+Range("A1:Z100").EntireColumn.AutoFit
+ActiveWorkbook.Save
+Application.ScreenUpdating = True
+
+End Sub
+
+

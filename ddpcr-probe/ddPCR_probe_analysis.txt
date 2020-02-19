@@ -1,0 +1,331 @@
+Attribute VB_Name = "ddPCR_probe_analysis"
+Sub ddPCR_probe_analysis()
+Application.ScreenUpdating = False
+
+Dim dateMacroRun As String
+Dim fileDate As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+fileDate = Format(DateTime.Now, "yyyymmdd")
+
+'Set the default folder path
+ChDir "X:\STARLIMS\Genotyping\ddPCR genotyping\ddPCR Output files"
+
+'Open file
+Dim fileToOpen As String
+Dim relativePath As String
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+Dim workBatchNum As String
+Dim analysisFile As Workbook
+
+fileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+If fileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    Exit Sub
+Else
+    Workbooks.Open Filename:=fileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+    
+    'Save as a new .xlxs document
+    thisFileName = Mid(fso.GetBaseName(ActiveWorkbook.Name), 1, 9) & "_" & fileDate
+    workBatchNum = Mid(fso.GetBaseName(ActiveWorkbook.Name), 3, 7)
+    ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_analysis.xlsx", FileFormat:=xlOpenXMLWorkbook
+
+    'Close original file & open saved copy
+    ActiveWorkbook.Close
+    Workbooks.Open Filename:=relativePath & thisFileName & "_analysis.xlsx"
+    Set analysisFile = ActiveWorkbook
+End If
+
+
+'Delete unwanted columns
+Range("AQ:BK").EntireColumn.Delete
+Range("AJ:AO").EntireColumn.Delete
+Range("W:AH").EntireColumn.Delete
+Range("S:U").EntireColumn.Delete
+Range("I:N").EntireColumn.Delete
+Range("G1").EntireColumn.Delete
+Range("E1").EntireColumn.Delete
+Range("B:C").EntireColumn.Delete
+
+'Insert new columns and set headers
+Range("L1").Value = "Average Fractional Abundance"
+Range("M1").Value = "Final Result"
+Range("N1").Value = "Comments"
+Range("F:H").EntireColumn.Insert
+Range("C:D").EntireColumn.Insert
+Range("C1").Value = "Surname"
+Range("D1").Value = "Forename"
+Range("G1").Value = "Positive Mt Droplets"
+Range("H1").Value = "Total Mt Droplets"
+Range("I1").Value = "Positive Wt Droplets"
+Range("J1").Value = "Total Wt Droplets"
+Range("T1").Value = "Operators"
+Range("U1").Value = "ResultSummary"
+Range("A:B").EntireColumn.Insert
+
+'Get GT's initials
+Dim operator As String
+operator = InputBox("Enter initials of GT analysing batch")
+
+
+'#Need to sort by well number to make sure all patients are in the correct order - split by Target first though!!
+Dim i As Integer
+Dim lastRow As Integer
+i = 2
+Do While Cells(i, 3) <> ""
+    Range("A" & i).FormulaR1C1 = "=LEFT(R[0]C[+2],1)"
+    Range("B" & i).FormulaR1C1 = "=RIGHT(R[0]C[+1],2)"
+    Range("Z" & i).FormulaR1C1 = "=RIGHT(R[0]C[-19],2)"
+    i = i + 1
+Loop
+
+Range("A1:Z200").Sort Key1:=Range("Z1"), Order1:=xlAscending, Header:=xlYes
+
+'Calulate last Wt row and last batch row
+Dim wtRow As Integer
+Dim wtDroplets As Range
+Dim cellValue As String
+cellValue = "Something"
+i = 1
+Do While cellValue <> ""
+    cellValue = Cells(i, 7).Text
+    If InStr(1, cellValue, " WT", vbTextCompare) Then
+        wtRow = i
+        Exit Do
+    End If
+    i = i + 1
+Loop
+
+Range("A" & wtRow).EntireRow.Insert
+lastRow = (wtRow * 2) - 1
+
+With ActiveSheet.Sort
+     .SortFields.Clear
+     .SortFields.Add Key:=Range("B1"), Order:=xlAscending
+     .SortFields.Add Key:=Range("A1"), Order:=xlAscending
+     .SetRange Range("A" & wtRow + 1 & ":S200")
+     .Header = xlNo
+     .Apply
+End With
+With ActiveSheet.Sort
+     .SortFields.Clear
+     .SortFields.Add Key:=Range("B1"), Order:=xlAscending
+     .SortFields.Add Key:=Range("A1"), Order:=xlAscending
+     .SetRange Range("A2" & ":S" & wtRow - 1)
+     .Header = xlNo
+     .Apply
+End With
+Range("Z1").EntireColumn.Delete
+Range("A:B").EntireColumn.Delete
+
+
+Set wtDroplets = Range("G" & wtRow + 1, "G" & Cells(Rows.Count, 1).End(xlUp).Row)
+wtDroplets.Copy Range("I2")
+
+'Add 0's to empty cells in FractionalAbundance column
+i = 2
+Do While i < wtRow
+    If Cells(i, 15) = "" Then
+        Cells(i, 15) = 0
+    End If
+    i = i + 1
+Loop
+    
+
+'Insert formulas (sums (col F & H) and averages (col O))
+Dim sampleCount, sampleStart As Integer
+sampleCount = 1
+sampleStart = 2
+i = 2
+Do While i < wtRow
+    cellValue = Cells(i, 2).Value
+    If cellValue = Cells(i + 1, 2).Value Then
+        sampleCount = sampleCount + 1
+    Else
+        Range("H" & i).Formula = "=SUM(" & Range("G" & sampleStart & ":G" & i).Address(False, False) & ")"
+        Range("J" & i).Formula = "=SUM(" & Range("I" & sampleStart & ":I" & i).Address(False, False) & ")"
+        Range("Q" & i).Formula = "=AVERAGE(" & Range("O" & sampleStart & ":O" & i).Address(False, False) & ")"
+        If IsError(Range("Q" & i)) = True Then
+            Range("Q" & i).Value = 0
+        End If
+        sampleStart = i + 1
+        sampleCount = 1
+    End If
+    i = i + 1
+Loop
+
+'Remove last 3 digits from sample ID
+i = 1
+Dim EXnoEdit As String
+
+Do While i < lastRow
+    cellValue = Cells(i, 2)
+    EXnoEdit = Left(Cells(i, 2), 9)
+    Range("B" & i).Value = EXnoEdit
+    i = i + 1
+Loop
+    
+
+'Get patient demographics from dilution robot file
+Dim dilFileExit As Boolean
+Dim dilFilePath As String
+Dim dilBatchNum As String
+Dim dilFile As Workbook
+
+dilFilePath = Dir("X:\STARLIMS\Dilution & PCR\Dilution Robot Files\*" & workBatchNum & "*")
+dilBatchNum = Mid(dilFilePath, 9, 7)
+Dir ("C:\")
+
+If dilBatchNum = "" Then
+    MsgBox "No dilution robot file exists"
+ElseIf dilBatchNum = workBatchNum Then
+    Debug.Print "Found it"
+    dilFilePath = "X:\STARLIMS\Dilution & PCR\Dilution Robot Files\" & dilFilePath
+    Workbooks.Open dilFilePath
+    Set dilFile = ActiveWorkbook
+    Range("O1", Range("Q" & Cells(Rows.Count, 1).End(xlUp).Row)).Copy
+    analysisFile.Activate
+    
+    With analysisFile
+        Set ptNames = .Sheets.Add(After:=.Sheets(.Sheets.Count))
+        ptNames.Name = "Patients"
+    End With
+    
+    Worksheets("Patients").Range("A1").PasteSpecial (xlPasteValues)
+    Range("A1", Range("C" & Cells(Rows.Count, 1).End(xlUp).Row)).Name = "Patients"
+    
+    i = 1
+    
+    Do While cellValue <> ""
+        cellValue = Cells(i, 1)
+        EXnoEdit = Replace(Cells(i, 1).Value, "-01", "")
+        Range("A" & i).Value = EXnoEdit
+        i = i + 1
+    Loop
+       
+    dilFile.Close
+Else
+    Debug.Print "Something else happened"
+End If
+
+'Add VLOOKUP for Surname and Forename
+If dilBatchNum <> "" Then
+    Worksheets(1).Activate
+    i = 2
+    Do While i < lastRow
+        If Cells(i, 1).Value <> "" Then
+            Range("C" & i).FormulaR1C1 = "=VLOOKUP(R[0]C[-1],Patients!Patients,2,FALSE)"
+            Range("D" & i).FormulaR1C1 = "=VLOOKUP(R[0]C[-2],Patients!Patients,3,FALSE)"
+            i = i + 1
+        Else
+            i = i + 1
+        End If
+    Loop
+End If
+
+'Auto-call results
+
+'Dictionary of assay types
+Dim assay_type As New Scripting.Dictionary
+assay_type.Add "JAK2", "JAK2 p.(Val617Phe)"
+assay_type.Add "MYD88", "MYD88 p.(Leu265Pro)"
+assay_type.Add "BRAF", "BRAF p.(Val600Glu)"
+assay_type.Add "D816V", "KIT p.(Asp816Val)"
+assay_type.Add "3243", "m.3243A>G"
+
+'Lower limits for each assay
+Dim lower_limits As New Scripting.Dictionary
+lower_limits.Add "JAK2", 0.3
+lower_limits.Add "MYD88", 0.3
+lower_limits.Add "BRAF", 0.3
+lower_limits.Add "D816V", 0.1
+lower_limits.Add "3243", 0.5
+
+
+'Check Target for assay type before assigning result in case multiple assays are being run on same plate
+Dim active_assay As String
+Dim total_droplets As Long
+
+i = 2
+Do While i < lastRow
+    cellValue = Cells(i, 5)
+    If cellValue = "" Then
+        Exit Do
+    Else
+        active_assay = Left(cellValue, InStr(1, cellValue, " ") - 1)
+    End If
+    
+    If Cells(i, 17) <> "" Then
+        'add up number of droplets
+        total_droplets = Cells(i, 8) + Cells(i, 10)
+        'highlight row with low droplet numbers
+        If total_droplets < 3000 Then
+            Range("A" & i & ":R" & i).Interior.ColorIndex = 6
+        End If
+        'Assign result
+        Cells(i, 18).Value = ddPCR_functions.calc_result(assay_type(active_assay), lower_limits(active_assay), Cells(i, 17).Value, total_droplets)
+        'Create mutation details field import
+        If total_droplets < 1000 Then
+            Cells(i, 21).Value = "MT: " & Cells(i, 8) & " / WT: " & Cells(i, 10)
+            Cells(i, 19).Value = "Insufficient total droplets"
+        ElseIf total_droplets >= 1000 And total_droplets < 3000 Then
+            If Cells(i, 17) < lower_limits(active_assay) Then
+                Cells(i, 21).Value = "Genotype -ve MT: " & Cells(i, 8) & " / WT: " & Cells(i, 10)
+                Cells(i, 19).Value = "Genotyping result"
+            Else
+                Cells(i, 21).Value = "Genotype +ve MT: " & Cells(i, 8) & " / WT: " & Cells(i, 10)
+                Cells(i, 19).Value = "Genotyping result"
+            End If
+        ElseIf total_droplets >= 3000 Then
+            If Cells(i, 17) < lower_limits(active_assay) Then
+                Cells(i, 21).Value = "MT: " & Cells(i, 8).Value & " / WT: " & Cells(i, 10).Value
+            Else
+                Cells(i, 21).Value = Round(Cells(i, 17), 2) & "% MT: " & Cells(i, 8).Value & " / WT: " & Cells(i, 10).Value
+            End If
+        End If
+    End If
+    i = i + 1
+Loop
+
+'Conditional formatting to detect concentration (F), positive (I) and total (N) droplets that are out of range
+Dim rngConc, rngPos, rngTotal As Range
+Dim condFormatConc, condFormatPos, condFormatTotal As FormatCondition
+
+Set rngConc = Range("F" & wtRow + 1 & ":F" & lastRow - 1)
+Set rngPos = Range("I2:I" & wtRow - 1)
+Set rngTotal = Range("N2:N" & wtRow - 1)
+
+Set condFormatConc = rngConc.FormatConditions.Add(xlCellValue, xlNotBetween, "100", "900")
+Set condFormatPos = rngPos.FormatConditions.Add(xlCellValue, xlLess, "=1000")
+Set condFormatTotal = rngTotal.FormatConditions.Add(xlCellValue, xlLess, "=10000")
+
+With condFormatConc
+    .Interior.ColorIndex = 3
+    .Font.ColorIndex = 1
+End With
+With condFormatPos
+    .Interior.ColorIndex = 3
+    .Font.ColorIndex = 1
+End With
+With condFormatTotal
+    .Interior.ColorIndex = 3
+    .Font.ColorIndex = 1
+End With
+
+'Formatting
+Range("G1:" & "H" & wtRow).Font.ColorIndex = 3
+Range("I1:" & "J" & wtRow).Font.ColorIndex = 10
+Range("Q:R").EntireColumn.Font.ColorIndex = 3
+Range("G1:" & "J" & wtRow).Font.Bold = True
+Range("Q:R").EntireColumn.Font.Bold = True
+ActiveWindow.Zoom = 70
+
+'Save file
+Range("T2").Value = "Quantasoft thresholds set and data analysis by: " & operator & " (" & dateMacroRun & ")"
+Range("A1:Z100").EntireColumn.AutoFit
+ActiveWorkbook.Save
+Application.ScreenUpdating = True
+
+End Sub

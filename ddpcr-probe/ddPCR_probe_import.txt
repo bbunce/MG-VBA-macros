@@ -1,0 +1,119 @@
+Attribute VB_Name = "ddPCR_probe_import"
+
+Sub ddPCR_probe_import()
+
+Application.ScreenUpdating = False
+
+'Select file to open
+Dim strFileToOpen As String
+Dim relativePath As String
+
+'Set the default folder path
+ChDir "X:\STARLIMS\Genotyping\ddPCR genotyping\ddPCR Output files"
+
+
+strFileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+'Check if analysis spreadsheet has been selected
+If strFileToOpen = "False" Then
+    MsgBox "No file selected.", vbExclamation, "Sorry!"
+    Exit Sub
+ElseIf Mid(strFileToOpen, Len(strFileToOpen) - 12, 8) = "analysis" Then
+    Workbooks.Open Filename:=strFileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+Else
+    MsgBox "Please select 'analysis' spreadsheet.", vbExclamation, "Sorry!"
+    Exit Sub
+End If
+
+'Get GT's initials
+Dim secondGT As String
+secondGT = InputBox("Enter initials of GT checking batch")
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("T3").Value = "Second check & Starlims import: " & secondGT & " (" & dateMacroRun & ")"
+ActiveWorkbook.Save
+
+'Save a copy
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+thisFileName = Mid(fso.GetBaseName(ActiveWorkbook.Name), 1, Len(fso.GetBaseName(ActiveWorkbook.Name)) - 9)
+Debug.Print thisFileName
+ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_import.csv", FileFormat:=xlCSV
+
+
+'Close original file & open saved copy
+Application.DisplayAlerts = False
+ActiveWorkbook.Close
+Workbooks.Open Filename:=relativePath & thisFileName & "_import.csv"
+
+'get last row (exlude WT targets)
+Dim lastRow As Integer
+Dim cellValue As String
+cellValue = "something"
+i = 2
+Do While cellValue <> ""
+    cellValue = Cells(i, 1)
+    i = i + 1
+Loop
+lastRow = i
+
+'Delete channel 2 rows
+Range("A" & lastRow & ":S200").EntireRow.Delete
+
+'Assign result to every row
+Dim ptResults As New Scripting.Dictionary
+Dim results() As String
+i = 2
+Do While i < lastRow
+    cellValue = Cells(i, 18)
+    If cellValue <> "" Then
+        ReDim results(1 To 2)
+        results(1) = Cells(i, 18)
+        results(2) = Cells(i, 21)
+        ptResults.Add Cells(i, 2).Text, results
+        i = i + 1
+    ElseIf cellValue = "" Then
+        i = i + 1
+    Else
+        MsgBox "Patient result assignment error", vbCritical, "Warning!"
+        Exit Do
+    End If
+    ReDim results(1 To 2)
+Loop
+
+
+Dim patientRowCount As Integer
+Dim j As Integer
+patientRowCount = 1
+i = 2
+For Each patient In ptResults
+    j = i
+    
+    Do While Cells(j, 2).Text = Cells(j + 1, 2).Text
+        patientRowCount = patientRowCount + 1
+        j = j + 1
+    Loop
+    
+    
+    If patient = Cells(i, 2) Then
+        For x = 1 To patientRowCount
+            Cells(i, 18).Value = ptResults(patient)(1)
+            Cells(i, 21).Value = ptResults(patient)(2)
+            i = i + 1
+        Next
+    Else
+        MsgBox "Patient ID Match Error", vbCritical, "Warning!"
+        Exit Sub
+    End If
+    patientRowCount = 1
+Next
+           
+
+Range("A1").Select
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+Application.DisplayAlerts = True
+
+End Sub

@@ -1,0 +1,128 @@
+Attribute VB_Name = "qCmlFunctions"
+Function ReplicateAccuracy(rng As Range) As Integer
+Dim triplicate As New Collection
+Dim repCheck(2) As Boolean
+Dim i As Integer
+Dim repCount As Integer
+
+'Add range to triplicate list
+For Each cell In rng
+    If cell = "Undetermined" Then
+        triplicate.Add (0)
+    Else
+        triplicate.Add (cell)
+    End If
+Next
+
+repCheck(0) = False
+repCheck(1) = False
+repCheck(2) = False
+
+'Check seperation
+For i = 0 To 2
+    If i = 0 And (triplicate(1) >= (triplicate(2) - 0.5) And triplicate(1) <= (triplicate(2) + 0.5)) Then
+        repCheck(i) = True
+    ElseIf i = 1 And (triplicate(2) >= (triplicate(3) - 0.5) And triplicate(2) <= (triplicate(3) + 0.5)) Then
+        repCheck(i) = True
+    ElseIf i = 2 And (triplicate(1) >= (triplicate(3) - 0.5) And triplicate(1) <= (triplicate(3) + 0.5)) Then
+        repCheck(i) = True
+    Else
+        repCheck(i) = False
+    End If
+Next
+
+    
+'Identify outlier, return integer denoting which replicate is the outlier
+If (repCheck(0) = True And repCheck(1) = True And repCheck(2) = True) Or (repCheck(0) = True And repCheck(1) = True And repCheck(2) = False) Or _
+    (repCheck(0) = False And repCheck(1) = True And repCheck(2) = True) Or (repCheck(0) = True And repCheck(1) = False And repCheck(2) = True) Then
+    Debug.Print "All replicates are within 0.5Ct's of each other"
+    ReplicateAccuracy = 3
+ElseIf repCheck(0) = False And repCheck(1) = True And repCheck(2) = False Then
+    Debug.Print "Replicate 1 is the outlier"
+    ReplicateAccuracy = 0
+ElseIf repCheck(0) = False And repCheck(1) = False And repCheck(2) = True Then
+    Debug.Print "Replicate 2 is the outlier"
+    ReplicateAccuracy = 1
+ElseIf repCheck(0) = True And repCheck(1) = False And repCheck(2) = False Then
+    Debug.Print "Replicate 3 is the outlier"
+    ReplicateAccuracy = 2
+ElseIf repCheck(0) = False And repCheck(1) = False And repCheck(2) = False Then
+    Debug.Print "Fail, all replicates are out of range of each other"
+    ReplicateAccuracy = 4
+Else
+    Debug.Print "Error"
+    ReplicateAccuracy = 5
+End If
+
+End Function
+
+
+
+Function qCmlResult(BcrAblPercent As Double, ablLevel As Long, p190 As Boolean) As String
+
+BcrAblPercent = Round(BcrAblPercent, 5)
+Debug.Print BcrAblPercent
+
+If ablLevel < 30000 Then
+    qCmlResult = "Sub-optimal ABL level"
+ElseIf BcrAblPercent = 0 Then
+    If ablLevel >= 30000 And ablLevel < 32000 Then
+        qCmlResult = "Not detected (MR4)"
+    ElseIf ablLevel >= 32000 And ablLevel < 100000 Then
+        qCmlResult = "Not detected (MR4.5)"
+    ElseIf ablLevel >= 100000 Then
+        qCmlResult = "Not detected (MR5)"
+    End If
+ElseIf BcrAblPercent > 0 Then
+    If p190 = False Then
+        If BcrAblPercent >= 0.001 And BcrAblPercent <= 0.00104 Then
+            qCmlResult = "0.001% (MR5)"
+        ElseIf BcrAblPercent < 0.001 Then
+            qCmlResult = "Less than 0.001% (IS) (MR5)"
+        
+        ElseIf BcrAblPercent >= 0.0032 And BcrAblPercent <= 0.003204 Then
+            qCmlResult = "0.0032% (IS) (MR4.5)"
+        ElseIf BcrAblPercent < 0.01 And BcrAblPercent < 0.0032 Then
+            qCmlResult = "Less than 0.0032% (IS) (MR4.5)"
+        
+        ElseIf BcrAblPercent >= 0.01 And BcrAblPercent <= 0.0104 Then
+            qCmlResult = "0.01% (MR4) (IS)"
+        ElseIf BcrAblPercent < 0.1 And BcrAblPercent < 0.01 Then
+            qCmlResult = "Less than 0.01% (IS) (MR4)"
+        
+        ElseIf BcrAblPercent >= 0.1 And BcrAblPercent <= 0.104 Then
+            qCmlResult = "0.1% (IS)"
+        ElseIf BcrAblPercent < 0.1 And BcrAblPercent > 0.01 Then
+            qCmlResult = "Less than 0.1% (IS) (MMR)"
+            
+        ElseIf BcrAblPercent > 0.1 Then
+            qCmlResult = Round(BcrAblPercent, 3) & "% (IS)"
+        End If
+    Else
+        If BcrAblPercent >= 0.001 And BcrAblPercent <= 0.00104 Then
+            qCmlResult = "0.001% (MR5)"
+        ElseIf BcrAblPercent < 0.001 Then
+            qCmlResult = "Less than 0.001% (MR5)"
+        
+        ElseIf BcrAblPercent >= 0.0032 And BcrAblPercent <= 0.003204 Then
+            qCmlResult = "0.0032% (IS) (MR4.5)"
+        ElseIf BcrAblPercent < 0.01 And BcrAblPercent < 0.0032 Then
+            qCmlResult = "Less than 0.0032% (MR4.5)"
+        
+        ElseIf BcrAblPercent >= 0.01 And BcrAblPercent <= 0.0104 Then
+            qCmlResult = "0.01% (MR4)"
+        ElseIf BcrAblPercent < 0.1 And BcrAblPercent < 0.01 Then
+            qCmlResult = "Less than 0.01%(MR4)"
+        
+        ElseIf BcrAblPercent >= 0.1 And BcrAblPercent <= 0.104 Then
+            qCmlResult = "0.1% (IS)"
+        ElseIf BcrAblPercent < 0.1 And BcrAblPercent > 0.01 Then
+            qCmlResult = "Less than 0.1%(MMR)"
+            
+        ElseIf BcrAblPercent > 0.1 Then
+            qCmlResult = Round(BcrAblPercent, 3) & "%"
+        End If
+    End If
+End If
+    
+End Function

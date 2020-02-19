@@ -1,0 +1,134 @@
+Attribute VB_Name = "RhD_Import"
+Sub RhdImport()
+Application.ScreenUpdating = False
+
+'Select file to open
+Dim strFileToOpen As String
+Dim relativePath As String
+
+'Set the default folder path
+ChDir "X:\STARLIMS\Genotyping\TaqMan genotyping\Fetal RhD Genotyping"
+
+strFileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+'Check if analysis spreadsheet has been selected
+If strFileToOpen = "False" Then
+    MsgBox "No file selected.", vbExclamation, "Sorry!"
+    Exit Sub
+ElseIf Mid(strFileToOpen, Len(strFileToOpen) - 12, 8) = "analysis" Then
+    Workbooks.Open Filename:=strFileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+Else
+    MsgBox "Please select 'analysis' spreadsheet.", vbExclamation, "Sorry!"
+    Exit Sub
+End If
+
+'Get GT's initials
+Dim secondGT As String
+secondGT = InputBox("Enter initials of GT checking batch")
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("L3").Value = "Second check: " & secondGT & " (" & dateMacroRun & ")"
+ActiveWorkbook.Save
+
+'Save a copy
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+thisFileName = Mid(fso.GetBaseName(ActiveWorkbook.Name), 1, Len(fso.GetBaseName(ActiveWorkbook.Name)) - 9)
+Debug.Print thisFileName
+ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_import.csv", FileFormat:=xlCSV
+
+
+'Close original file & open saved copy
+Application.DisplayAlerts = False
+ActiveWorkbook.Close
+Workbooks.Open Filename:=relativePath & thisFileName & "_import.csv"
+
+'Delete every row that is blank or does not contain an EX number
+Dim cellValue As String
+Dim lastRow As Integer
+i = 2
+
+Do While cellValue <> "LPL" Or cellValue <> "TRUE"
+    cellValue = Cells(i, 2).Text
+    If cellValue = "LPL" Then
+        Exit Do
+    ElseIf ((InStr(1, Mid(Cells(i, 2), 7, 9), "EX") = 0) Or (IsEmpty(cellValue) = True)) Then
+        Range("B" & i).EntireRow.Delete
+    ElseIf InStr(1, Mid(Cells(i, 2), 7, 9), "EX") = 1 Then
+        Range("A" & i).Value = MGfunctions.CalcWell(Cells(i, 1))
+        Range("B" & i).Value = Mid(Cells(i, 2), 7, 9)
+        i = i + 1
+    Else
+        Debug.Print "Error"
+        i = i + 1
+    End If
+Loop
+Range("A" & i).EntireRow.Delete
+lastRow = i
+    
+
+'Assign result to every row
+Dim ptResults As New Scripting.Dictionary
+i = 2
+Do While i < lastRow
+    cellValue = Cells(i, 10)
+    If cellValue <> "" Then
+        ptResults.Add Cells(i, 2).Text, Cells(i, 10).Text
+        i = i + 1
+    ElseIf cellValue = "" Then
+        i = i + 1
+    Else
+        Debug.Print "Dict Error"
+        i = i + 9
+    End If
+Loop
+
+Dim patientRowCount As Integer
+Dim j As Integer
+patientRowCount = 1
+i = 2
+For Each patient In ptResults
+    Debug.Print patient
+    Debug.Print ptResults(patient)
+    
+    j = i
+    
+    Do While Cells(j, 2).Text = Cells(j + 1, 2).Text
+        patientRowCount = patientRowCount + 1
+        j = j + 1
+    Loop
+    
+    If patient = Cells(i, 2) Then
+        For x = 1 To patientRowCount
+            If InStr(1, ptResults(patient), "Fail") = 1 Then
+                Range("J" & i).Value = "Fail"
+                i = i + 1
+            ElseIf InStr(1, ptResults(patient), "Repeat") = 1 Then
+                Range("J" & i).Value = "Repeat"
+                i = i + 1
+            ElseIf Cells(i, 3).Text = "Rhd Exon 5" Then
+                Range("J" & i).Value = ptResults(patient)
+                i = i + 1
+            ElseIf Cells(i, 3).Text = "Rhd Exon 7" Or Cells(i, 3).Text = "EIF2C1" Then
+                Range("J" & i).Value = "Pass"
+                i = i + 1
+            Else
+                Debug.Print "Result error"
+                i = i + 1
+            End If
+        Next
+    Else
+        Debug.Print "Patient ID Match Error"
+    End If
+    patientRowCount = 1
+Next
+           
+
+Range("A1").Select
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+Application.DisplayAlerts = True
+
+End Sub

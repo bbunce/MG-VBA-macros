@@ -1,0 +1,90 @@
+Attribute VB_Name = "Import"
+Sub evaG_CNV_import()
+
+Application.ScreenUpdating = False
+
+Dim evaWorksheet As Workbook
+Set evaWorksheet = ActiveWorkbook
+
+evaWorksheet.Worksheets("Analysis").Activate
+
+'Copies analysis sheet opening a new workbook, save as csv and closes
+Dim relativePath As String
+Dim importFullPath As String
+Dim workBatchNum As String
+
+workBatchNum = ThisWorkbook.Sheets("Coversheet").Range("B6").Value
+relativePath = ActiveWorkbook.Path & "\"
+importFullPath = relativePath & workBatchNum & "_import"
+
+Application.DisplayAlerts = False
+ThisWorkbook.Sheets("Analysis").Copy
+
+'Get GT's initials
+Dim secondGT As String
+secondGT = InputBox("Enter initials of GT checking batch")
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("R3").Value = "Second check & Starlims import: " & secondGT & " (" & dateMacroRun & ")"
+ActiveWorkbook.Save
+
+'get last row - DOESNT WORK
+Dim i As Integer
+Dim lastRow As Integer
+i = 2
+
+Do While Cells(i, 1) <> "" Or Cells(i + 1, 1) <> ""
+    i = i + 1
+Loop
+lastRow = i
+
+'Assign result to every row
+Dim sampleID As String
+Dim target As String
+Dim ratio As String
+Dim prevRatio As Range
+Dim finalResult As String
+Dim prevFinalResult As Range
+
+i = 2
+j = 1
+Do While i < lastRow
+    sampleID = Range("B" & i).Value
+    j = i
+    
+    Do While Cells(j, 1) <> ""
+        target = Range("G" & j).Value
+        ratio = Range("N" & j).Value
+        finalResult = Range("O" & j).Value
+        
+        Set prevRatio = Range("N" & j - 1)
+        Set prevFinalResult = Range("O" & j - 1)
+        
+        If ratio <> "" And sampleID = Cells(j - 1, 2) Then
+            prevRatio.Value = ratio
+            prevFinalResult.Value = finalResult
+        End If
+        j = j + 1
+    Loop
+      
+    i = j
+    i = i + 1
+Loop
+  
+'Delete empty rows
+i = 2
+Do While i < lastRow
+    If Cells(i, 1) = "" Then
+        Range("A" & i).EntireRow.Delete
+    End If
+    i = i + 1
+Loop
+
+ActiveWorkbook.SaveAs Filename:=importFullPath, FileFormat:=xlCSV
+ActiveWorkbook.Close
+
+Application.DisplayAlerts = True
+Application.ScreenUpdating = True
+
+End Sub
+

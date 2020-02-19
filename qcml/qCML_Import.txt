@@ -1,0 +1,139 @@
+Attribute VB_Name = "qCML_Import"
+Sub qCML_Import()
+Application.ScreenUpdating = False
+
+'Select file to open
+Dim strFileToOpen As String
+Dim relativePath As String
+
+'Set the default folder path
+ChDir "X:\Molecular pathology\Haemato-oncology\Real-time PCR data\CML"
+
+strFileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+'Check if analysis spreadsheet has been selected
+If strFileToOpen = "False" Then
+    MsgBox "No file selected.", vbExclamation, "Sorry!"
+    Exit Sub
+ElseIf Mid(strFileToOpen, Len(strFileToOpen) - 12, 8) = "analysis" Then
+    Workbooks.Open Filename:=strFileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+Else
+    MsgBox "Please select 'analysis' spreadsheet.", vbExclamation, "Sorry!"
+    Exit Sub
+End If
+
+Application.DisplayAlerts = False
+
+'Get GT's initials
+Dim secondCheck As String
+secondCheck = InputBox("Enter initials of GT performing 2nd check")
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("P4").Value = "Data check performed by " & secondCheck & " (" & dateMacroRun & ")"
+ActiveWorkbook.Save
+
+'Save a copy
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+thisFileName = Mid(fso.GetBaseName(ActiveWorkbook.Name), 1, Len(fso.GetBaseName(ActiveWorkbook.Name)) - 9)
+ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_import.csv", FileFormat:=xlCSV
+
+'Close original file & open saved copy
+ActiveWorkbook.Close
+Workbooks.Open Filename:=relativePath & thisFileName & "_import.csv"
+
+
+
+'Delete every row that is blank, an NTC or does not contain an EX number
+Dim cellValue As String
+Dim lastRow As Integer
+i = 2
+
+Do While cellValue <> "LPL" Or cellValue <> "TRUE"
+    cellValue = Cells(i, 2).Text
+    If cellValue = "LPL" Then
+        Exit Do
+    ElseIf cellValue = "" Or InStr(1, cellValue, "EX", vbTextCompare) = 0 Or cellValue = "Wessex P190 LOW STD" Then
+        Range("A" & i).EntireRow.Delete
+    ElseIf Cells(i, 4).Text = "NTC" Then
+        Range("A" & i).EntireRow.Delete
+    ElseIf InStr(1, cellValue, "EX", vbTextCompare) > 0 Then
+        Range("A" & i).Value = baseFunctions.CalcWell(Range("A" & i).Value)
+        i = i + 1
+    ElseIf i > 200 Then
+        Exit Do
+    End If
+Loop
+Range("A" & i).EntireRow.Delete
+lastRow = i
+           
+'Round up ABL level and add "x copies of ABL/Biomed" to be imported in mutation details field
+i = 2
+Do While Cells(i, 1).Text <> "" Or i = lastRow
+    cellValue = Cells(i, 8)
+    If cellValue <> "" And (Cells(i, 3).Text = "abl" Or Cells(i, 3).Text = "qCML-ABL") Then
+        Range("H" & i).Value = Round(cellValue, 0) & " copies of ABL"
+    ElseIf cellValue <> "" And (Cells(i, 3).Text = "biomed" Or Cells(i, 3).Text = "qCML-Biomed") Then
+        Range("H" & i).Value = Round(cellValue, 0) & " copies of Biomed"
+    End If
+    i = i + 1
+Loop
+
+'Create dictionary [key]Sample Name and [value]List[Final Result, Total ABL BCR/ABL]
+Dim ptResults As New Scripting.Dictionary
+Dim resultValues(2) As String
+i = 3
+Do While i < lastRow
+    cellValue = Mid(Cells(i, 2), InStr(1, Cells(i, 2), "EX"), 9)
+    If cellValue <> "" Then
+        resultValues(1) = Cells(i, 13).Text
+        resultValues(2) = Cells(i + 3, 8).Text
+        ptResults.Add cellValue, resultValues
+        Erase resultValues
+        i = i + 6
+    ElseIf cellValue = "" Then
+        Debug.Print "Empty"
+        i = i + 6
+    Else
+        Debug.Print "Dict Error"
+        i = i + 6
+    End If
+Loop
+
+
+'Fill all biomed "Final Results" with results and abl with passes
+Range("O1").Value = "ABL"
+i = 2
+Do While i < lastRow
+    cellValue = Mid(Cells(i, 2), InStr(1, Cells(i, 2), "EX"), 9)
+    For Each pt In ptResults.Keys
+        If cellValue = pt And (Cells(i, 3) = "biomed" Or Cells(i, 3) = "qCML-Biomed") Then
+            Range("M" & i, "M" & i + 2).Value = ptResults(pt)(1)
+            Range("O" & i, "O" & i + 2).Value = ptResults(pt)(2)
+        End If
+        If cellValue = pt And (Cells(i + 3, 3) = "abl" Or Cells(i + 3, 3) = "qCML-ABL") Then
+            If ptResults(pt)(1) = "Repeat" Or ptResults(pt)(1) = "Sub-optimal ABL level" Then
+                Range("M" & i + 3, "M" & i + 5).Value = "Repeat"
+            Else
+                Range("M" & i + 3, "M" & i + 5).Value = "Pass"
+            End If
+        End If
+    Next
+    i = i + 6
+Loop
+
+i = 2
+Do While i < lastRow
+    cellValue = Mid(Cells(i, 2), InStr(1, Cells(i, 2), "EX"), 9)
+    Range("B" & i).Value = cellValue
+    i = i + 1
+Loop
+
+Range("A1").Select
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+Application.DisplayAlerts = True
+
+End Sub

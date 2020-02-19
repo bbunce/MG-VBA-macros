@@ -1,0 +1,420 @@
+Attribute VB_Name = "RhD_Analysis"
+Sub RhdAnalysis()
+Application.ScreenUpdating = False
+
+Dim noResult, ntcPass As Boolean
+noResult = False
+ntcPass = True
+
+'Select file to open
+Dim strFileToOpen As String
+Dim relativePath As String
+
+'Set the default folder path
+ChDir "X:\STARLIMS\Genotyping\TaqMan genotyping\Fetal RhD Genotyping"
+
+strFileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+'Add error handling for any non .txt file selected
+If strFileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    Exit Sub
+Else
+    Workbooks.Open Filename:=strFileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+End If
+
+If Sheets.Count >= 2 Then
+    MsgBox "You have select a previously analysed batch. Please select Taqman .txt file"
+    Exit Sub
+End If
+
+'Get GT's initials
+Dim initialGT As String
+initialGT = InputBox("Enter initials of GT analysing batch")
+
+'Save a copy
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+thisFileName = fso.GetBaseName(ActiveWorkbook.Name)
+ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_analysis.xlsx", FileFormat:=xlOpenXMLWorkbook
+
+'Close original file & open saved copy
+ActiveWorkbook.Close
+Workbooks.Open Filename:=relativePath & thisFileName & "_analysis.xlsx"
+
+'Create values to use for data validation result's
+Dim mainWorksheet As String
+mainWorksheet = ActiveSheet.Name
+
+'Sheet count
+
+Sheets.Add(After:=Sheets(Sheets.Count)).Name = "ResultOptions"
+
+Range("A1").Value = "Result Options"
+Range("A1").Font.Bold = True
+Range("A2").Value = "RhD Positive"
+Range("A3").Value = "RhD Negative"
+Range("A4").Value = "Repeat"
+Range("A5").Value = "Fail"
+
+Worksheets(mainWorksheet).Activate
+
+'Delete unwanted rows and columns
+Range("A1:A10").EntireRow.Delete
+Range("J1:AG1").EntireColumn.Delete
+Range("H1").EntireColumn.Delete
+Range("G1").EntireColumn.Delete
+
+    
+Dim Slopes As New Scripting.Dictionary
+Dim R2 As New Scripting.Dictionary
+
+Dim cellValue As String
+Dim i As Integer
+i = 2
+Dim abc As String
+ActiveSheet.Cells(1, 1).Select
+
+Do While cellValue <> "NAP"
+    cellValue = Cells(i, 1).Value
+    If Cells(i, 1).Value = "Well" Then
+        Cells(i, 1).EntireRow.Delete
+    ElseIf Cells(i, 1) = "Slope" And Cells(i - 1, 3).Value = "EIF2C1" Then
+        Slopes.Add Cells(i, 2).Value, "EIF2C1"
+        R2.Add Cells(i + 2, 3).Value, "EIF2C1"
+        Range("A" & i & ":" & "A" & i + 5).EntireRow.Delete
+    ElseIf Cells(i, 1) = "Slope" And Cells(i - 1, 3).Value = "Rhd Exon 5" Then
+        Slopes.Add Cells(i, 2).Value, "Rhd Exon 5"
+        R2.Add Cells(i + 2, 3).Value, "Rhd Exon 5"
+        Range("A" & i & ":" & "A" & i + 5).EntireRow.Delete
+    ElseIf Cells(i, 1) = "Slope" And Cells(i - 1, 3).Value = "Rhd Exon 7" Then
+        Slopes.Add Cells(i, 2).Value, "Rhd Exon 7"
+        R2.Add Cells(i + 2, 3).Value, "Rhd Exon 7"
+        Range("A" & i & ":" & "A" & i + 3).EntireRow.Delete
+    End If
+    Cells(i, 1).Select
+    i = i + 1
+Loop
+
+'sort by task, insert row to seperate, ntc, standard, unknown
+Range("A1", Range("G1").End(xlDown)).Sort Key1:=Range("E1"), Order1:=xlDescending, Header:=xlYes
+i = 3
+Do While cellValue <> ""
+    cellValue = Cells(i, 5).Value
+    If Cells(i, 5) <> Cells(i - 1, 5) Then
+        Rows(i).EntireRow.Insert
+        i = i + 1
+    End If
+    i = i + 1
+Loop
+
+'sort by well
+Range("A1", Range("G1").End(xlDown)).Sort Key1:=Range("A1"), Order1:=xlAscending, Header:=xlYes
+
+'Insert columns to calculate average Ct and Quantities
+Cells(1, 11).Value = "Operators"
+Cells(1, 10).Value = "Comment"
+Cells(1, 9).Value = "Final Result"
+Cells(1, 8).Value = "Average Quantity"
+Range("G1").EntireColumn.Insert
+Cells(1, 7).Value = "Average Ct"
+
+'Insert rows between different patients, sort by reporter and add average forumlas
+Dim patientRow As Integer
+i = 3
+patientRow = 1
+cellValue = "notEmpty"
+Do While cellValue <> ""
+    cellValue = Cells(i, 2).Value
+    If Mid(Cells(i, 2), 7, 9) <> Mid(Cells(i - 1, 2), 7, 9) Then
+        If patientRow = 9 Then
+            Range(Cells(i - 9, 1), Cells(i - 1, 8)).Sort Key1:=(Cells(i - 9, 4)), Order1:=xlAscending, Header:=xlGuess
+            
+            Range("G" & i - 8).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("G" & i - 5).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("G" & i - 2).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            
+            Range("I" & i - 8).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("I" & i - 5).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("I" & i - 2).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            
+            Rows(i).EntireRow.Insert
+            i = i + 1
+            patientRow = 0
+        ElseIf patientRow = 6 Then
+            Range(Cells(i - 6, 1), Cells(i - 1, 8)).Sort Key1:=(Cells(i - 6, 4)), Order1:=xlAscending, Header:=xlGuess
+            
+            Range("G" & i - 5).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("G" & i - 2).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            
+            Range("I" & i - 5).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("I" & i - 2).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            
+            Rows(i).EntireRow.Insert
+            i = i + 1
+            patientRow = 0
+        End If
+    End If
+    i = i + 1
+    patientRow = patientRow + 1
+    
+    If i = 200 Then
+        Exit Do
+    End If
+Loop
+
+'Insert slope and r2 values
+i = 1
+Dim j As Integer
+Range("E1").Select
+Do Until Cells(i, 5).Value = "Standard"
+    i = i + 1
+Loop
+
+For x = 1 To 3
+    Rows(i).EntireRow.Insert
+Next x
+
+Cells(i - 1, 3).Value = "Slope"
+Cells(i - 1, 4).Value = "R2"
+Range("B" & i - 1).EntireRow.Font.Bold = True
+j = i
+For Each n In Slopes
+    Cells(j, 2).Value = Slopes(n)
+    Cells(j, 3).Value = n
+    j = j + 1
+Next
+j = j - 3
+For Each n In R2
+    Cells(j, 4).Value = n
+    j = j + 1
+Next
+Rows(j).EntireRow.Insert
+
+'Set colours
+Dim red, blue, green, yellow As Long
+red = rgb(255, 80, 80)
+blue = rgb(142, 169, 219)
+green = rgb(112, 173, 71)
+yellow = rgb(255, 255, 0)
+
+'Highlight cell colour depending on thresholds
+i = 2
+Dim cellDouble As Double
+Do While i < 200
+    If IsNumeric(Cells(i, 6).Value) Then 'Check if cell value is num, if true convert to double
+        cellDouble = CDbl(Cells(i, 6).Value)
+        If Cells(i, 3).Text = "Rhd Exon 5" And (cellDouble <= 30 Or cellDouble >= 38) Then
+            Cells(i, 6).Interior.Color = yellow
+        ElseIf Cells(i, 3).Text = "Rhd Exon 7" And (cellDouble <= 30 Or cellDouble >= 40) Then
+            Cells(i, 6).Interior.Color = yellow
+        ElseIf Cells(i, 3).Text = "EIF2C1" And (cellDouble >= 35 And Mid(Cells(i, 2), 5, 2) = "QQ") Then
+            Cells(i, 6).Interior.Color = yellow
+        ElseIf Cells(i, 3).Text = "EIF2C1" And (cellDouble >= 31.5 Or cellDouble <= 27) And (Mid(Cells(i, 2), 5, 2) <> "QQ") Then
+            Cells(i, 6).Interior.Color = yellow
+        ElseIf Cells(i, 3).Text = "EIF2C1" And cellDouble <= 34.999 Then
+            Cells(i, 6).Interior.Color = green
+        ElseIf (Cells(i, 3).Text = "Rhd Exon 5" And cellDouble < 38) Or (Cells(i, 3).Text = "Rhd Exon 7" And cellDouble < 40) Then
+            Cells(i, 6).Interior.Color = red
+        End If
+    ElseIf Cells(i, 5).Text = "NTC" And Cells(i, 6).Text <> "Undetermined" Then
+            Cells(i, 6).Interior.Color = yellow
+    ElseIf Cells(i, 5).Text = "NTC" And Cells(i, 6).Text = "Undetermined" Then
+        Cells(i, 6).Interior.Color = green
+    ElseIf Cells(i, 6).Text = "Undetermined" Then
+        Cells(i, 6).Interior.Color = blue
+    End If
+    i = i + 1
+Loop
+
+'check if any failed NTC's
+i = 2
+Do While True
+    If Cells(i, 5).Text = "NTC" And Cells(i, 6).Text <> "Undetermined" Then
+        ntcPass = False
+        Exit Do
+    ElseIf i > 200 Then
+        Exit Do
+    End If
+    i = i + 1
+Loop
+
+'Get list of EX No.'s
+Dim exList As New Collection
+Range("B2").Activate
+cellValue = "notEmpty"
+i = 2
+Do While i < 200
+    cellValue = Mid(Cells(i, 2), 7, 9)
+    If InStr(1, cellValue, "EX") = 1 Then
+        If MGfunctions.IsInArray(cellValue, exList) = False Then
+            exList.Add (cellValue)
+            i = i + 1
+        Else
+            i = i + 1
+        End If
+    ElseIf InStr(1, cellValue, "EX") = 0 And cellValue <> "" Then
+        Exit Do
+    Else
+        i = i + 1
+    End If
+Loop
+
+
+'Add QQ negative to exList
+cellValue = Cells(i, 2).Text
+If InStr(1, cellValue, "QQ") = 5 And Cells(i, 5).Text = "Unknown" Then
+    exList.Add (Mid(Cells(i, 2).Text, 5, 9))
+End If
+
+
+'Remove patients with less than 9 replicates/rows
+Dim patientIndex As Integer
+Dim sampleID As String
+i = 2
+patientRow = 1
+patientIndex = 1
+cellValue = ""
+
+Do While cellValue <> "EIF2C1"
+    cellValue = Cells(i, 2).Text
+    If cellValue <> "" Then
+        patientRow = patientRow + 1
+    ElseIf cellValue = "" And Cells(i + 1, 2).Text <> "EIF2C1" Then
+        If patientRow < 9 Then
+            sampleID = Mid(Cells(i - 1, 2), 7, 9)
+            For Each sample In exList
+                If sampleID = sample Then
+                    noResult = True
+                    Exit For
+                Else
+                    patientIndex = patientIndex + 1
+                End If
+            Next
+            exList.Remove (patientIndex)
+            patientIndex = 0
+            patientRow = 0
+        Else
+            patientRow = 0
+        End If
+    End If
+    i = i + 1
+Loop
+
+For Each sample In exList
+    Debug.Print (sample)
+Next
+
+
+'Calculate result
+Dim arrCtColour(8) As String
+Dim cellColour As Integer
+For Each sample In exList
+    i = 2
+    Do While i < 100
+    
+        If Mid(Cells(i, 2).Text, 5, 2) = "QQ" Then
+            cellValue = Mid(Cells(i, 2).Text, 5, 9)
+        Else
+            cellValue = Mid(Cells(i, 2), 7, 9)
+        End If
+        
+        If sample = cellValue Then
+            For x = 0 To 8
+                cellColour = MGfunctions.sumRGB(Range("F" & i))
+                arrCtColour(x) = cellColour
+                i = i + 1
+            Next
+            Cells(i - 1, 10) = MGfunctions.RhdResult(arrCtColour)
+                With Cells(i - 1, 10).Validation
+                    .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="=ResultOptions!A2:A5"
+                End With
+            If Mid(Cells(i - 1, 10), 5, 1) = "a" Then
+                Range("J" & i - 1).Interior.Color = yellow
+            End If
+            Exit Do
+        Else
+            i = i + 1
+        End If
+    Loop
+Next
+
+'Conditional formatting of "Final Results" column
+Dim resultRange As Range
+Dim posCond, negCond, failCond, formCond As FormatCondition
+Set resultRange = Range("J2", "J200")
+
+Set posCond = resultRange.FormatConditions.Add(xlCellValue, xlEqual, "RhD Positive")
+Set negCond = resultRange.FormatConditions.Add(xlCellValue, xlEqual, "RhD Negative")
+Set failCond = resultRange.FormatConditions.Add(xlCellValue, xlNotEqual, "RhD Positive", "RhD Negative")
+
+With posCond
+.Font.Color = red
+.Font.Bold = True
+End With
+
+With negCond
+.Font.Color = blue
+.Font.Bold = True
+End With
+
+With failCond
+.Font.Color = green
+.Font.Bold = True
+End With
+
+
+'Slopes between -3.2 and -3.6
+i = 1
+Do Until cellValue = "Slope"
+    cellValue = Cells(i, 3).Value
+    i = i + 1
+    If i = 200 Then
+        MsgBox "Error"
+        Exit Do
+    End If
+Loop
+j = i
+
+For i = j To j + 2
+    If IsNumeric(Cells(i, 3).Value) Then 'Check if cell value is num, if true convert to double
+        cellDouble = CDbl(Cells(i, 3).Value)
+        If cellDouble <= -3.6 Or cellDouble >= -3.2 Then
+            Cells(i, 3).Interior.Color = yellow
+        ElseIf cellDouble >= -3.6 And cellDouble <= -3.2 Then
+            Cells(i, 3).Interior.Color = green
+        End If
+    End If
+Next
+
+'r2 greater than 0.98
+For i = j To j + 2
+    If IsNumeric(Cells(i, 4).Value) Then 'Check if cell value is num, if true convert to double
+        cellDouble = CDbl(Cells(i, 4).Value)
+        If cellDouble < 0.98 Then
+            Cells(i, 4).Interior.Color = yellow
+        ElseIf cellDouble >= 0.98 Then
+            Cells(i, 4).Interior.Color = green
+        End If
+    End If
+Next
+
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("A1").EntireRow.Font.Bold = True
+Range("L2").Value = "Initial check: " & initialGT & " (" & dateMacroRun & ")"
+Range("A1", "Z200").EntireColumn.AutoFit
+Range("A1").Select
+ActiveWorkbook.Save
+
+If noResult = True Then
+    MsgBox ("Patient will less than 9 replicates detected. Manually calculate result.")
+End If
+If ntcPass = False Then
+    MsgBox ("NTC contamination detected")
+End If
+
+End Sub
+

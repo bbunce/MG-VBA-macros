@@ -1,0 +1,108 @@
+Attribute VB_Name = "PcrSetup"
+Sub PcrSetup()
+Application.ScreenUpdating = False
+Dim theYear As Integer
+theYear = Right(Year(Date), 2) & 0
+
+Dim evaWorksheet As Workbook
+Dim plateWb As Workbook
+Set evaWorksheet = ThisWorkbook
+
+'Get workbatch number from coversheet
+Dim workbatchNo As String
+workbatchNo = Worksheets("Coversheet").Range("B6").Value
+
+If workbatchNo = "" Then
+    MsgBox "Please specify workbatch number (Coversheet:B6)"
+    ThisWorkbook.Worksheets("Coversheet").Activate
+    Exit Sub
+End If
+
+Dim workbookPath As String
+workbookPath = Application.ActiveWorkbook.Path
+
+'Search for PCR layout file in same folder
+plateFilePath = Dir(workbookPath & "\*" & workbatchNo & "*")
+plateNo = Left(plateFilePath, 7)
+
+Dir ("C:\")
+
+If plateNo = "" Then
+    MsgBox "No PCR plate layout exists. Make sure a plate layout from Starlims has been saved in the same folder as the worksheet. PL" & theYear & "...xls"
+    Exit Sub
+ElseIf plateNo = workbatchNo Then
+    Debug.Print "Found it"
+    plateFilePath = workbookPath & "\PL" & plateNo & "*.xls"
+    Workbooks.Open plateFilePath
+    Set plateWb = ActiveWorkbook
+    Range("A1:M60").Copy
+    evaWorksheet.Activate
+    
+    Worksheets("PCR Plate Import").Range("A1").PasteSpecial (xlPasteValues)
+    
+    Application.DisplayAlerts = False
+    plateWb.Close
+    Application.DisplayAlerts = True
+    
+    Worksheets("PCR Plate Layout").Activate
+Else
+    MsgBox "Could not find PCR plate layout file"
+    Exit Sub
+End If
+
+'Get all unique amplicons on batch from the data sheet
+Dim i As Integer
+Dim ampliconList As Object
+Set ampliconList = CreateObject("System.Collections.ArrayList")
+
+Worksheets("Data").Activate
+i = 2
+Do While i < 97
+    If eFunctions.IsInArray(Range("N" & i).Value, ampliconList) Then
+        i = i + 1
+    Else
+        ampliconList.Add Range("N" & i)
+        i = i + 1
+    End If
+Loop
+
+'Paste unique amplicons in the primer section
+Worksheets("PCR").Activate
+i = 5
+For Each amp In ampliconList
+    Range("A" & i).Value = amp
+    i = i + 1
+Next
+
+'Count how many replicates for each sample to add to DNA diltion rxns section
+Worksheets("Plate set-up").Activate
+Dim ptReplicates As New Scripting.Dictionary
+Dim repCount As Integer
+i = 2
+repCount = 0
+Do While Cells(i, 3) <> ""
+    If Cells(i, 3) = Cells(i + 1, 3) Then
+        repCount = repCount + 1
+        i = i + 1
+    Else
+        ptReplicates.Add Cells(i, 3), repCount
+        repCount = 0
+        i = i + 1
+    End If
+Loop
+
+        
+Worksheets("DNA Dilutions").Activate
+i = 4
+Do While Cells(i, 1) <> ""
+    For Each pt In ptReplicates.Keys
+        If pt = Mid(Cells(i, 1), 1, 9) Then
+            Cells(i, 13) = ptReplicates(pt) + 1
+            Exit For
+        End If
+    Next
+    i = i + 1
+Loop
+
+Application.ScreenUpdating = True
+End Sub

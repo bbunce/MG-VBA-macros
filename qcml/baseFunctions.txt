@@ -1,0 +1,66 @@
+Attribute VB_Name = "baseFunctions"
+'Open workbook, return relative file path as string
+Function OpenFile() As Boolean
+
+Dim fileToOpen As String
+Dim relativePath As String
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+fileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+If fileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    OpenFile = False
+Else
+    Workbooks.Open Filename:=fileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+    
+    'Save as a new .xlxs document
+    thisFileName = fso.GetBaseName(ActiveWorkbook.Name)
+    ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_analysis.xlsx", FileFormat:=xlOpenXMLWorkbook
+
+    'Close original file & open saved copy
+    ActiveWorkbook.Close
+    Workbooks.Open Filename:=relativePath & thisFileName & "_analysis.xlsx"
+    OpenFile = True
+End If
+
+End Function
+
+Function CalcWell(wellNo As Integer) As String
+
+Dim alphabet() As Variant
+Dim well As String
+Dim column As String
+Dim rowNum As Double
+Dim row As String
+Dim RoundUp As Integer
+alphabet = Array("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z")
+
+'Set column number
+If wellNo Mod 12 = 0 Then
+    column = 12
+Else
+    If wellNo Mod 12 < 10 Then
+        column = "0" & wellNo Mod 12
+    Else
+        column = wellNo Mod 12
+    End If
+End If
+
+'Set row letter
+rowNum = wellNo / 12
+If Int(rowNum) = rowNum Then
+    RoundUp = rowNum
+Else
+    RoundUp = Int(rowNum) + 1
+End If
+row = alphabet(RoundUp - 1)
+
+well = row & column
+
+CalcWell = well
+
+End Function
+

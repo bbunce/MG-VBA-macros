@@ -1,0 +1,56 @@
+Attribute VB_Name = "eFunctions"
+Function IsInArray(valToBeFound As Variant, arr As Variant) As Boolean
+'DEVELOPER: Ryan Wells (wellsr.com)
+'DESCRIPTION: Function to check if a value is in an array of values
+'INPUT: Pass the function a value to search for and an array of values of any data type.
+'OUTPUT: True if is in array, false otherwise
+Dim element As Variant
+On Error GoTo IsInArrayError: 'array is empty
+    For Each element In arr
+        If element = valToBeFound Then
+            IsInArray = True
+            Exit Function
+        End If
+    Next element
+Exit Function
+IsInArrayError:
+On Error GoTo 0
+IsInArray = False
+
+End Function
+
+
+Function callResult(targetType As String, target As String, refAmplicon As String, xlinked As Boolean, gender As String, ratio As Double) As String
+
+'Check gender and xlinked status of amplicon
+If xlinked = True And gender = "male" Then
+    ratio = ratio * 2
+End If
+
+'Checks NTC status, ref amplicon status, auto-call results
+If InStr(1, "NTC", targetType, vbTextCompare) Then
+        If ratio <= 0.1 Then
+            callResult = "Pass"
+        ElseIf ratio >= 0.1 Then
+            callResult = "Contamination?"
+        End If
+ElseIf target = refAmplicon And ratio = 1 Then
+    callResult = "Pass"
+ElseIf target <> refAmplicon Then
+    If ratio >= 0.9 And ratio <= 1.1 Then
+        callResult = "No change detected"
+    ElseIf ratio >= 1.35 And ratio <= 1.65 Then
+        callResult = "Heterozygous duplication detected"
+    ElseIf ratio >= 1.8 And ratio <= 2.2 Then
+        callResult = "Homozygous duplication detected"
+    ElseIf ratio >= 0.45 And ratio <= 0.55 Then
+        callResult = "Heterozygous deletion detected"
+    ElseIf ratio <= 0.1 Then
+        callResult = "Homozygous deletion detected"
+    Else
+        callResult = "Mosaic"
+    End If
+End If
+
+
+End Function

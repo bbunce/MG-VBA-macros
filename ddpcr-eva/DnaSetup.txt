@@ -1,0 +1,83 @@
+Attribute VB_Name = "DnaSetup"
+Sub DnaSetup()
+Application.ScreenUpdating = False
+'Get patient info from corbett dilution file using workbatch no.
+'-Dilution calculations - Done
+'-Space to specify normal controls - Done
+'Automatically copy platelayout info from file using workbatch no.
+'-Get unique list of amplicons to add to primer list
+'-Count number of occurances of each patient to add to DNA dilution calculations
+
+
+'Get patient demographics from dilution robot file
+
+'workbooks
+Dim evaWorksheet As Workbook
+Dim dilFile As Workbook
+
+Set evaWorksheet = ThisWorkbook
+
+Dim workbatchNo As String
+Dim dilFileExit As Boolean
+Dim dilFilePath As String
+Dim dilBatchNum As String
+
+'Get workbatch number from coversheet
+workbatchNo = Worksheets("Coversheet").Range("B6").Value
+
+If workbatchNo = "" Then
+    MsgBox "Please specify workbatch number (Coversheet:B6)"
+    ThisWorkbook.Worksheets("Coversheet").Activate
+    Exit Sub
+End If
+
+dilFilePath = Dir("X:\STARLIMS\Dilution & PCR\Dilution Robot Files\*" & workbatchNo & "*")
+dilBatchNum = Mid(dilFilePath, 9, 7)
+Dir ("C:\")
+
+If dilBatchNum = "" Then
+    MsgBox "No dilution robot file exists"
+ElseIf dilBatchNum = workbatchNo Then
+    Debug.Print "Found it"
+    dilFilePath = "X:\STARLIMS\Dilution & PCR\Dilution Robot Files\" & dilFilePath
+    Workbooks.Open dilFilePath
+    Set dilFile = ActiveWorkbook
+    Range("O1", Range("V" & Cells(Rows.Count, 1).End(xlUp).Row)).Copy
+    evaWorksheet.Activate
+    
+    With evaWorksheet
+        Set ptNames = .Sheets.Add(After:=.Sheets(.Sheets.Count))
+        ptNames.Name = "Patients"
+    End With
+    
+    Worksheets("Patients").Range("A2").PasteSpecial (xlPasteValues)
+    Range("E:F").EntireColumn.Delete
+    Range("E1").EntireColumn.Insert
+    Range("D1").Value = "Nanodrop"
+    Range("E1").Value = "Qubit"
+    Range("E2").Value = "Concentration"
+    
+    Range("A1", Range("G" & Cells(Rows.Count, 1).End(xlUp).Row)).Copy
+        
+    Worksheets("DNA Dilutions").Range("A2").PasteSpecial (xlPasteValues)
+       
+    Application.DisplayAlerts = False
+    Worksheets("Patients").Delete
+    Worksheets("DNA Dilutions").Activate
+    Application.DisplayAlerts = True
+    
+    Range("A1:Z100").EntireColumn.AutoFit
+    
+    'Save file
+    ActiveWorkbook.Save
+    Application.ScreenUpdating = True
+       
+    dilFile.Close
+Else
+    MsgBox "Could not find DNA dilution file"
+    Exit Sub
+End If
+
+Call PcrSetup.PcrSetup
+
+End Sub

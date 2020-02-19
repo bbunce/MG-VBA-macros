@@ -1,0 +1,130 @@
+Attribute VB_Name = "MGfunctions"
+Function IsInArray(valToBeFound As Variant, arr As Variant) As Boolean
+'DEVELOPER: Ryan Wells (wellsr.com)
+'DESCRIPTION: Function to check if a value is in an array of values
+'INPUT: Pass the function a value to search for and an array of values of any data type.
+'OUTPUT: True if is in array, false otherwise
+Dim element As Variant
+On Error GoTo IsInArrayError: 'array is empty
+    For Each element In arr
+        If element = valToBeFound Then
+            IsInArray = True
+            Exit Function
+        End If
+    Next element
+Exit Function
+IsInArrayError:
+On Error GoTo 0
+IsInArray = False
+
+End Function
+
+Function CalcWell(wellNo As Integer) As String
+
+Dim alphabet() As Variant
+Dim well As String
+Dim column As String
+Dim rowNum As Double
+Dim row As String
+Dim RoundUp As Integer
+alphabet = Array("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z")
+
+'Set column number
+If wellNo Mod 12 = 0 Then
+    column = 12
+Else
+    If wellNo Mod 12 < 10 Then
+        column = "0" & wellNo Mod 12
+    Else
+        column = wellNo Mod 12
+    End If
+End If
+
+'Set row letter
+rowNum = wellNo / 12
+If Int(rowNum) = rowNum Then
+    RoundUp = rowNum
+Else
+    RoundUp = Int(rowNum) + 1
+End If
+row = alphabet(RoundUp - 1)
+
+well = row & column
+
+CalcWell = well
+
+End Function
+
+Function sumRGB(rng As Range) As Integer
+
+ Dim intColor As Long
+ Dim rgb As Integer
+ intColor = rng.Interior.Color
+ r = intColor And 255
+ g = intColor \ 256 And 255
+ b = intColor \ 256 ^ 2 And 255
+ sumRGB = r + g + b
+ 
+End Function
+
+
+Function RhdResult(arr As Variant) As String
+
+Dim resultArr() As Variant
+resultArr = Array("RhD Positive", "RhD Negative", "Repeat")
+Dim rhdPos As Integer
+Dim rhdNeg As Integer
+Dim eif2c1Pass As Integer
+Dim outOfBound As Integer
+
+rhdPos = 0
+rhdNeg = 0
+eif2c1Pass = 0
+outOfBound = 0
+
+For i = 6 To 8
+    If arr(i) = 356 Then
+        eif2c1Pass = eif2c1Pass + 1
+    End If
+Next
+
+For i = 0 To 5
+    If arr(i) = 415 Then
+        rhdPos = rhdPos + 1
+    ElseIf arr(i) = 530 Then
+        rhdNeg = rhdNeg + 1
+    End If
+Next
+
+For i = 0 To 5
+    If arr(i) = 510 Then
+        outOfBound = outOfBound + 1
+    End If
+Next
+
+If eif2c1Pass = 3 Then
+    If outOfBound <= 2 Then
+        If rhdPos >= 4 Then
+            RhdResult = resultArr(0)
+        ElseIf rhdPos <= 3 And rhdNeg <= 3 Then
+            RhdResult = resultArr(2)
+        ElseIf rhdNeg >= 4 And (rhdPos = 2 Or outOfBound = 2) Then
+            RhdResult = resultArr(2)
+        ElseIf rhdNeg >= 4 And rhdPos <= 1 Then
+            RhdResult = resultArr(1)
+        Else
+            RhdResult = "Repeat RhD 5 or 7 error"
+        End If
+    ElseIf outOfBound >= 3 Then
+        RhdResult = resultArr(2) & " / Check outliers"
+    Else
+        RhdResult = "Out of bounds error"
+    End If
+ElseIf eif2c1Pass <= 2 Then
+        RhdResult = resultArr(2) & " EIF2C1 fail"
+Else
+    RhdResult = "EIF2C1 error"
+End If
+
+
+End Function

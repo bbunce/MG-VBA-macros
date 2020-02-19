@@ -1,0 +1,18 @@
+Attribute VB_Name = "ddPCR_functions"
+Function calc_result(assay As String, lower_limit As Double, frac_abundance As Double, total_droplets As Long) As String
+If total_droplets >= 3000 Then
+    If frac_abundance < lower_limit Then
+        calc_result = "No variant detected"
+    Else
+        calc_result = assay & " variant detected (" & Round(frac_abundance, 2) & "%)"
+    End If
+ElseIf total_droplets >= 1000 And total_droplets < 3000 Then
+    If frac_abundance < lower_limit Then
+        calc_result = "No variant detected"
+    Else
+        calc_result = assay & " variant detected"
+    End If
+Else
+    calc_result = "Fail"
+End If
+End Function

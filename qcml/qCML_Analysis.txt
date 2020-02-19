@@ -1,0 +1,421 @@
+Attribute VB_Name = "qCML_Analysis"
+Sub qCML_Analysis()
+
+Application.ScreenUpdating = False
+
+'Set the default folder path
+ChDir "X:\Molecular pathology\Haemato-oncology\Real-time PCR data\CML"
+
+'Open file
+Dim fileToOpen As String
+Dim relativePath As String
+Dim fso As New Scripting.FileSystemObject
+Dim thisFileName As String
+
+fileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+
+If fileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    Exit Sub
+Else
+    Workbooks.Open Filename:=fileToOpen
+    relativePath = ActiveWorkbook.Path & "\"
+    
+    'Save as a new .xlxs document
+    thisFileName = fso.GetBaseName(ActiveWorkbook.Name)
+    ActiveWorkbook.SaveAs Filename:=relativePath & thisFileName & "_analysis.xlsx", FileFormat:=xlOpenXMLWorkbook
+
+    'Close original file & open saved copy
+    ActiveWorkbook.Close
+    Workbooks.Open Filename:=relativePath & thisFileName & "_analysis.xlsx"
+End If
+
+
+'Delete unwanted rows and columns
+Range("A1", "A10").EntireRow.Delete
+Range("J1", "AG1").EntireColumn.Delete
+Range("G1", "H1").EntireColumn.Delete
+Range("D1").EntireColumn.Delete
+
+'Set column headers
+Range("G1").Value = "Qty Mean"
+Range("H1").Value = "Total ABL BCR/ABL"
+Range("I1").Value = "Bcr/Abl ratio from curve"
+Range("J1").Value = "Non-IS (%)"
+Range("K1").Value = "IS (%)"
+Range("L1").Value = "Previous Result Percentage (IS)"
+Range("M1").Value = "Final Result"
+Range("N1").Value = "Comments"
+
+'Get GT's initials
+Dim initialGT As String
+initialGT = InputBox("Enter initials of GT checking batch")
+Dim dateMacroRun As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+Range("P3").Value = "Data analysis performed by " & initialGT & " (" & dateMacroRun & ")"
+ActiveWorkbook.Save
+
+'Get slope & r2 values
+Dim Slopes As New Scripting.Dictionary
+Dim R2 As New Scripting.Dictionary
+
+Dim cellValue As String
+Dim i As Integer
+i = 2
+Dim abc As String
+ActiveSheet.Cells(1, 1).Select
+
+Do While cellValue <> "NAP"
+    cellValue = Cells(i, 1).Value
+    If Cells(i, 1).Value = "Well" Then
+        Cells(i, 1).EntireRow.Delete
+    ElseIf Cells(i, 1) = "Slope" And (Cells(i - 1, 3).Value = "abl" Or Cells(i - 1, 3).Value = "ABL" Or Cells(i - 1, 3).Value = "qCML-ABL") Then
+        Slopes.Add Cells(i, 2).Value, "ABL"
+        R2.Add Cells(i + 2, 3).Value, "ABL"
+        Range("A" & i & ":" & "A" & i + 5).EntireRow.Delete
+    ElseIf Cells(i, 1) = "Slope" And (Cells(i - 1, 3).Value = "biomed" Or Cells(i - 1, 3).Value = "Biomed" Or Cells(i - 1, 3).Value = "qCML-Biomed") Then
+        Slopes.Add Cells(i, 2).Value, "Biomed"
+        R2.Add Cells(i + 2, 3).Value, "Biomed"
+        Range("A" & i & ":" & "A" & i + 3).EntireRow.Delete
+    End If
+    Cells(i, 1).Select
+    i = i + 1
+Loop
+
+'sort by task, insert row to seperate, ntc, standard, unknown
+Range("A1", Range("F1").End(xlDown)).Sort Key1:=Range("D1"), Order1:=xlDescending, Header:=xlYes
+
+i = 3
+Do While cellValue <> ""
+    cellValue = Cells(i, 4).Value
+    If Cells(i, 4) <> Cells(i - 1, 4) Then
+        Rows(i).EntireRow.Insert
+        i = i + 1
+    End If
+    i = i + 1
+Loop
+
+'sort by well
+Range("A1", Range("F1").End(xlDown)).Sort Key1:=Range("A1"), Order1:=xlAscending, Header:=xlYes
+
+'Convert "Wessex P190 LOW STD" to "p190"
+Dim p190Batch As Boolean
+p190Batch = False
+i = 2
+cellValue = Cells(i, 2)
+Do While cellValue = "Wessex P190 LOW STD"
+    cellValue = Cells(i, 2)
+    If cellValue = "Wessex P190 LOW STD" Then
+        Range("B" & i).Value = "p190"
+        p190Batch = True
+    End If
+    i = i + 1
+Loop
+
+
+'Add average, sum forumlas for Quantity, inserts rows, assign final result
+i = 3
+cellValue = "notEmpty"
+Do While cellValue <> ""
+    cellValue = Cells(i, 2).Value
+    If InStr(1, cellValue, "EX") >= 1 Then
+        If Mid(cellValue, InStr(1, cellValue, "EX"), 9) <> Mid(Cells(i + 1, 2).Text, InStr(1, cellValue, "EX"), 9) Then
+        
+            Range("G" & i - 4).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("G" & i - 1).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("H" & i - 4).FormulaR1C1 = "=SUM(R[-1]C[-2]:R[+1]C[-2])"
+            Range("H" & i - 1).FormulaR1C1 = "=SUM(R[-1]C[-2]:R[+1]C[-2])"
+            Range("I" & i - 4).FormulaR1C1 = "=R[0]C[-1]/R[+3]C[-1]"
+            Range("J" & i - 4).FormulaR1C1 = "=R[0]C[-1]*100"
+            Range("K" & i - 4).FormulaR1C1 = "=FIXED(R[0]C[-1]*0.53,5)"
+            
+            Rows(i + 1).EntireRow.Insert
+            i = i + 2
+        Else
+            i = i + 1
+        End If
+    ElseIf InStr(1, cellValue, "EX") = 0 Then
+        If cellValue = "" Then
+            Exit Do
+        ElseIf cellValue <> Cells(i + 1, 2).Text Then
+            Range("G" & i - 4).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("G" & i - 1).FormulaR1C1 = "=AVERAGE(R[-1]C[-1]:R[+1]C[-1])"
+            Range("H" & i - 4).FormulaR1C1 = "=SUM(R[-1]C[-2]:R[+1]C[-2])"
+            Range("H" & i - 1).FormulaR1C1 = "=SUM(R[-1]C[-2]:R[+1]C[-2])"
+            Range("I" & i - 4).FormulaR1C1 = "=R[0]C[-1]/R[+3]C[-1]"
+            Range("J" & i - 4).FormulaR1C1 = "=R[0]C[-1]*100"
+            Range("K" & i - 4).FormulaR1C1 = "=FIXED(R[0]C[-1]*0.53,5)"
+            
+            Rows(i + 1).EntireRow.Insert
+            i = i + 2
+        Else
+            i = i + 1
+        End If
+    Else
+        Debug.Print cellValue
+        i = i + 1
+    End If
+    
+    If i > 200 Then
+        Exit Do
+    End If
+Loop
+
+'insert slope and r2 values
+Dim slopeR2Pass As Boolean
+slopeR2Pass = True
+Range("A" & i - 1 & ":A" & i + 1).EntireRow.Insert
+Range("C" & i).Value = "Slope"
+Range("D" & i).Value = "R2"
+i = i + 1
+For Each metric In Slopes
+    Range("B" & i).Value = Slopes(metric)
+    Range("C" & i).Value = metric
+    i = i + 1
+Next
+i = i - 2
+For Each metric In R2
+    Range("D" & i).Value = metric
+    i = i + 1
+Next
+i = i - 2
+
+'Check slope and r2 values are correct
+Dim cellDouble As Double
+For i = i To i + 1
+    If IsNumeric(Cells(i, 3).Value) Then 'Check if cell value is num, if true convert to double
+        cellDouble = CDbl(Cells(i, 3).Value)
+        If cellDouble <= -3.6 Or cellDouble >= -3.2 Then
+            Cells(i, 3).Interior.ColorIndex = 27
+            slopeR2Pass = False
+        ElseIf cellDouble >= -3.6 And cellDouble <= -3.2 Then
+            Cells(i, 3).Interior.ColorIndex = 43
+        End If
+    Else
+        Exit For
+    End If
+Next
+'r2 greater than 0.98
+For i = i - 2 To i - 1
+    If IsNumeric(Cells(i, 4).Value) Then 'Check if cell value is num, if true convert to double
+        cellDouble = CDbl(Cells(i, 4).Value)
+        If cellDouble < 0.98 Then
+            Cells(i, 4).Interior.ColorIndex = 27
+            slopeR2Pass = False
+        ElseIf cellDouble >= 0.98 Then
+            Cells(i, 4).Interior.ColorIndex = 43
+        End If
+    End If
+Next
+
+'check NTC's
+Dim ntcPass As Boolean
+ntcPass = True
+i = 2
+Do While cellValue <> "NTC"
+    cellValue = Cells(i, 4)
+    If cellValue = "NTC" Then
+        Do While cellValue = "NTC"
+            cellValue = Cells(i, 4)
+            If Range("E" & i).Value <> "Undetermined" And Range("E" & i).Value <> "" Then
+                Range("E" & i).Interior.ColorIndex = 27
+                ntcPass = False
+            ElseIf Range("E" & i).Value = "Undetermined" Then
+                Range("E" & i).Interior.ColorIndex = 43
+            End If
+            i = i + 1
+        Loop
+        Exit Do
+    End If
+    i = i + 1
+Loop
+    
+
+'Loop over Ct's to identify outliers (green for triplicates within 0.5 of each other, yellow if for outliers)
+Dim tripRange As Range
+Dim outlierID As Variant
+i = 2
+cellValue = Cells(2, 4)
+
+Do While cellValue <> Unknown
+    Set tripRange = Range("E" & i & ":E" & i + 2)
+    cellValue = Cells(i, 4)
+    If Cells(i, 3) = "biomed" Or Cells(i, 3) = "qCML-Biomed" Then
+        outlierID = qCmlFunctions.ReplicateAccuracy(tripRange)
+        If outlierID >= 0 And outlierID <= 2 Then
+            Range("E" & i + outlierID & ":F" & i + outlierID).Interior.ColorIndex = 27
+        ElseIf outlierID = 3 Then
+            Range("E" & i & ":E" & i + 2).Interior.ColorIndex = 43
+        ElseIf outlierID = 4 Then
+            Range("E" & i & ":F" & i + 2).Interior.ColorIndex = 27
+            Range("I" & i + 1 & ":K" & i + 1).Value = "Fail"
+        ElseIf outlierID = 5 Then
+            MsgBox "Replicate Accuracy function error no.5"
+            Exit Do
+        Else
+            MsgBox "Replicate Accuracy function error"
+            Exit Do
+        End If
+        i = i + 3
+    ElseIf Cells(i, 3) = "abl" Or Cells(i, 3) = "qCML-ABL" Then
+        outlierID = qCmlFunctions.ReplicateAccuracy(tripRange)
+        If outlierID >= 0 And outlierID <= 2 Then
+            Range("E" & i + outlierID & ":F" & i + outlierID).Interior.ColorIndex = 27
+        ElseIf outlierID = 3 Then
+            Range("E" & i & ":E" & i + 2).Interior.ColorIndex = 43
+        ElseIf outlierID = 4 Then
+            Range("E" & i & ":F" & i + 2).Interior.ColorIndex = 27
+            Range("I" & i + 1).Value = "Fail"
+        ElseIf outlierID = 5 Then
+            MsgBox "Replicate Accuracy function error no.5"
+            Exit Do
+        Else
+            MsgBox "Replicate Accuracy function error"
+            Exit Do
+        End If
+        i = i + 4
+    Else
+        Debug.Print "RepAcc Error"
+        Exit Do
+    End If
+    
+    If i > 200 Then
+        Exit Do
+    End If
+Loop
+
+
+'Loop through outliers converting numbers to strings to be removed from calculations
+'Change non-outlier Quantity results of less than 3 to 3 and highlight
+i = 2
+cellValue = Cells(2, 4)
+Do While cellValue = "Unknown" Or cellValue = ""
+    cellValue = Cells(i, 4)
+    If Range("F" & i).Interior.ColorIndex = 27 And Range("F" & i).Value <> 0 Then
+        Range("E" & i).Value = "'" & Range("E" & i)
+        Range("F" & i).Value = "'" & Range("F" & i)
+    ElseIf Range("F" & i).Interior.ColorIndex = 27 And Range("F" & i).Value = 0 Then
+        Range("F" & i).Value = "'" & Range("F" & i)
+    ElseIf (Range("F" & i).Value <> "" And Range("E" & i).Value <> "Undetermined") And (Range("F" & i).Interior.ColorIndex = -4142 And Range("F" & i).Value < 3) Then
+        Range("F" & i).Value = 3
+        Range("F" & i).Interior.ColorIndex = 45
+    End If
+    i = i + 1
+    
+    If i > 200 Then
+        Exit Do
+    End If
+Loop
+
+'Check if outlier exists and modify biomed/abl (average * 2)
+Dim ablOutOfRange As Boolean
+Dim biomedOutOfRange As Boolean
+ablOutOfRange = False
+biomedOutOfRange = False
+i = 3
+cellValue = Cells(i, 4)
+Do While cellValue = "Unknown"
+    cellValue = Cells(i, 4)
+    Set tripRange = Range("E" & i - 1 & ":E" & i + 1)
+    For Each cell In tripRange
+        If cell.Interior.ColorIndex = 27 Then
+            ablOutOfRange = True
+        End If
+    Next
+    Set tripRange = Range("E" & i + 2 & ":E" & i + 4)
+    For Each cell In tripRange
+        If cell.Interior.ColorIndex = 27 Then
+            biomedOutOfRange = True
+        End If
+    Next
+    
+    If ablOutOfRange = True And biomedOutOfRange = False Then
+        Range("H" & i + 3).FormulaR1C1 = "=R[0]C[-1]*2"
+        Range("H" & i + 3).Interior.ColorIndex = 27
+    ElseIf ablOutOfRange = False And biomedOutOfRange = True Then
+        Range("H" & i).FormulaR1C1 = "=R[0]C[-1]*2"
+        Range("H" & i).Interior.ColorIndex = 27
+    End If
+    
+    ablOutOfRange = False
+    biomedOutOfRange = False
+    i = i + 7
+
+    If i > 200 Then
+        Exit Do
+    End If
+Loop
+
+'Change p190 back to Wessex P190 LOW STD
+i = 2
+cellValue = Cells(i, 2)
+Do While cellValue = "p190"
+    cellValue = Cells(i, 2)
+    If cellValue = "p190" Then
+        Range("B" & i).Value = "Wessex P190 LOW STD"
+    End If
+    i = i + 1
+Loop
+    
+Range("A1").EntireRow.Font.Bold = True
+Range("I1:M1").EntireColumn.Font.Bold = True
+Range("I1:K1").EntireColumn.Font.ColorIndex = 3
+Range("L1").EntireColumn.Font.ColorIndex = 10
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+
+'Auto-call results
+i = 3
+cellValue = Cells(i, 4)
+Do While cellValue = "Unknown"
+    On Error GoTo Handler
+    cellValue = Cells(i, 4)
+    
+    If IsError(Range("J" & i)) = True Then
+        Range("M" & i).Value = "Repeat"
+        Range("N" & i).Value = "Check ABL levels"
+    ElseIf Range("J" & i).Value = "Fail" Then
+        Range("M" & i).Value = "Repeat"
+    Else
+        If p190Batch = True Then
+            'p190 does NOT use IS values!
+            Range("M" & i).Value = qCmlFunctions.qCmlResult(Cells(i, 10), Cells(i + 3, 8), p190Batch)
+            Range("K1").EntireColumn.Font.ColorIndex = 15
+        Else
+            'Final result fr p210 is calculated from the IS value!
+            Range("M" & i).Value = qCmlFunctions.qCmlResult(Cells(i, 11), Cells(i + 3, 8), p190Batch)
+            Range("J1").EntireColumn.Font.ColorIndex = 15
+        End If
+    End If
+    If Cells(i + 7, 4) <> "Unknown" Then
+        Exit Do
+    End If
+    i = i + 7
+
+    If i > 200 Then
+        Exit Do
+    End If
+Loop
+    
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+
+'Inform user if any NTC's and/or slope/r2 values have failed
+If ntcPass = False Then
+    MsgBox "NTC contamination detected", vbExclamation, "Warning!"
+End If
+
+If slopeR2Pass = False Then
+    MsgBox "Slope and/or R2 values are out of range", vbExclamation, "Slope & R2"
+End If
+Exit Sub
+
+Handler:
+MsgBox "Error occurred calling results"
+Range("A1", "Z200").EntireColumn.AutoFit
+ActiveWorkbook.Save
+
+End Sub
+
+
+
