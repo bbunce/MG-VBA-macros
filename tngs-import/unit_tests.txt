@@ -1,0 +1,113 @@
+Attribute VB_Name = "Unit_Tests"
+Sub gDNA_test()
+
+Dim tests As New Collection
+Dim output() As Variant
+Dim i As Integer
+
+tests.Add "Chr1(GRCh37):g.6302846A>G"
+tests.Add "Chr8(GRCh37):g.61693946_61693951dup"
+tests.Add "Chr12(GRCh37):g.121432116_121432117insC"
+tests.Add "chrX:22151491-22151850"
+
+
+For i = 1 To tests.Count
+    Debug.Print tests(i)
+    output = tngs_functions.gDna_caller(tests(i))
+    For Each Item In output
+        Debug.Print Item
+    Next
+Next
+
+
+End Sub
+
+Sub genotype_test()
+
+Dim geno_tests As New Collection
+Dim i As Integer
+
+geno_tests.Add "0/1"
+geno_tests.Add "1/1"
+geno_tests.Add "0.0"
+geno_tests.Add "0.2"
+geno_tests.Add "0.5"
+geno_tests.Add "0.8"
+geno_tests.Add "1.25"
+geno_tests.Add "1.5"
+geno_tests.Add "1.7"
+
+For i = 1 To geno_tests.Count
+    Debug.Print geno_tests(i), genotype_caller(geno_tests(i))
+Next
+
+End Sub
+
+Sub cDNA_test()
+
+Dim tests As New Collection
+Dim output() As Variant
+Dim i As Integer
+
+tests.Add "NM_006005.3:c.1324A>G"
+tests.Add "NM_000197.1:c.277+4A>T"
+tests.Add "NM_003590.4:c.1207-2A>T"
+tests.Add "NM_017780.3:c.2053_2058dup"
+
+For i = 1 To tests.Count
+    Debug.Print tests(i)
+    output = tngs_functions.cDNA_caller(tests(i))
+    For Each Item In output
+        Debug.Print Item
+    Next
+Next
+
+End Sub
+
+Sub aminoAcid_caller()
+
+Dim tests As New Collection
+Dim output() As Variant
+Dim i As Integer
+
+tests.Add "p.Thr442Ala"
+tests.Add "p.Gln203*"
+tests.Add "p.?"
+tests.Add "p.Ala685_Lys686dup"
+
+For i = 1 To tests.Count
+    Debug.Print tests(i)
+    output = tngs_functions.aminoAcid_caller(tests(i))
+    For Each Item In output
+        Debug.Print Item
+    Next
+Next
+
+
+End Sub
+
+Sub variant_caller()
+
+Dim tests As New Collection
+Dim output As Variant
+Dim i As Integer
+
+'substitution - missense
+'Debug.Print tngs_functions.variant_caller("WFS1", "0/1", "Chr4(GRCh37):g.6302846A>G", "NM_006005.3:c.1324A>G", "p.Thr442Ala", "missense", "substitution") ' Het
+'Debug.Print tngs_functions.variant_caller("WFS1", "1/1", "Chr4(GRCh37):g.6302846A>G", "NM_006005.3:c.1324A>G", "p.Thr442Ala", "missense", "substitution") ' Hom
+'substitution - stop gain/nonsense
+'substitution - synonymous
+
+'frameshifts
+Debug.Print tngs_functions.variant_caller("HNF1A", "0/1", "Chr12(GRCh37):g.121432116_121432117insC", "NM_000545.6:c.863_864insC", "p.Pro289Alafs*28", "frameshift", "insertion") ' Het
+Debug.Print tngs_functions.variant_caller("ZMPSTE24", "1/1", "Chr1(GRCh37):g.40756551dup", "NM_005857.4:c.1085dup", "p.Leu362Phefs*19", "frameshift", "duplication") ' Hom
+
+
+'structural variant
+'Debug.Print tngs_functions.variant_caller("PHEX_ex_12", "1.47", "chrX:22151491-22151850", "", "", "", "duplication") ' Het
+'Debug.Print tngs_functions.variant_caller("HNF1B_1-9", "0.6", "chr17:36047285-36105023", "", "", "", "deletion") ' Hom
+
+
+
+
+End Sub

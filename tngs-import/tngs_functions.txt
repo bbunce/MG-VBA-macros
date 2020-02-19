@@ -1,0 +1,282 @@
+Attribute VB_Name = "tngs_functions"
+Function AA_3to1(letter3 As Variant, amino_acids As Dictionary) As String
+
+For Each Key In amino_acids.Keys
+    If Key = letter3 Then
+        AA_3to1 = amino_acids(Key)
+    End If
+Next
+
+End Function
+
+Function variant_caller(gene As String, genotype As String, gDNA As String, cDNA As String, aminoAcid As String, codingEffect As String, varType As String) As String
+
+Dim aGenomic() As Variant
+Dim aDNA() As Variant
+Dim aAmino() As Variant
+
+On Error GoTo no_variant_details
+    genotype = Functions2.genotype_caller(genotype)
+    aGenomic = Functions2.gDna_caller(gDNA)
+    aDNA = Functions2.cDNA_caller(cDNA)
+    aAmino = Functions2.aminoAcid_caller(aminoAcid)
+no_variant_details:
+    Debug.Print "No variant details"
+
+'output string format
+Dim subHet As String
+Dim subHom As String
+Dim delDupInsHet As String
+Dim delDupInsHom As String
+
+subHet = "c.[{0}]+[=],p.{1}"
+subHom = "c.[{0}]+[{0}],p.{1}]"
+delDupInsHet = "c.{0}het_{1}{2}"
+delDupInsHom = "c.{0}{1}{2}"
+
+
+Dim cNom As String
+Dim pNomHet As String
+Dim pNomHom As String
+
+
+'Sort by variant first
+If varType = "substitution" Then
+    cNom = aDNA(2) & aDNA(4) & ">" & aDNA(5)
+    pNomHet = aAmino(1) & aAmino(2) & aAmino(1) & aAmino(3)
+    pNomHom = aAmino(1) & aAmino(2) & aAmino(3)
+ElseIf (varType = "duplication" Or varType = "deletion" Or varType = "insertion") And codingEffect = "in-frame" Then 'in-frame
+    Debug.Print "in-frame"
+    cNom = aDNA(2) & "_" & aDNA(3)
+ElseIf (varType = "duplication" Or varType = "deletion" Or varType = "insertion") And codingEffect = "frameshift" Then 'frameshift
+    Debug.Print "frameshift"
+    cNom = aGenomic(2) & "_" & aGenomic(3)
+ElseIf (varType = "duplication" Or varType = "deletion" Or varType = "insertion") And codingEffect = "" Then 'structural variant
+    Debug.Print "structural variant"
+    cNom = aGenomic(2) & "_" & aGenomic(3)
+End If
+
+
+'Genotype
+If varType = "substitution" And codingEffect <> "" Then
+    If genotype = "Heterozygous" Then
+        variant_caller = Functions2.strFormat(subHet, cNom, pNomHet)
+    ElseIf genotype = "Homozygous" Then
+        variant_caller = Functions2.strFormat(subHom, cNom, pNomHom)
+    Else
+        Debug.Print "Error"
+    End If
+ElseIf codingEffect = "" Then
+    If genotype = "Heterozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHet, cNom, Left(varType, 3), aGenomic(4))
+    ElseIf genotype = "Homozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHom, cNom, Left(varType, 3), aGenomic(4))
+    Else
+        Debug.Print "Error"
+    End If
+ElseIf codingEffect = "in-frame" Then
+    If genotype = "Heterozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHet, cNom, aGenomic(4), "")
+    ElseIf genotype = "Homozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHom, cNom, aGenomic(4), "")
+    Else
+        Debug.Print "Error"
+    End If
+Else
+    If genotype = "Heterozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHet, cNom, aGenomic(4), "")
+    ElseIf genotype = "Homozygous" Then
+        variant_caller = Functions2.strFormat(delDupInsHom, cNom, aGenomic(4), "")
+    Else
+        Debug.Print "Error"
+    End If
+End If
+        
+
+End Function
+
+Function genotype_caller(genotype As String) As String
+'Does NOT account for X-linked/hemizygous calls
+Dim geno_dbl As Double
+
+If IsNumeric(genotype) = True Then
+    geno_dbl = CDbl(genotype)
+    If geno_dbl < 0.1 Then
+        genotype_caller = "Homozygous"
+    ElseIf geno_dbl >= 0.4 And geno_dbl <= 0.6 Then
+        genotype_caller = "Heterozygous"
+    ElseIf geno_dbl >= 1.4 And geno_dbl <= 1.6 Then
+        genotype_caller = "Heterozygous"
+    Else
+        genotype_caller = "Mosaic"
+    End If
+Else
+    If genotype = "1/1" Then
+        genotype_caller = "Homozygous"
+    ElseIf genotype = "0/1" Then
+        genotype_caller = "Heterozygous"
+    End If
+End If
+
+End Function
+
+Function gDna_caller(gDNA As String) As Variant
+Dim output(4) As Variant
+Dim chr As String
+Dim gStart As String
+Dim gEnd As String
+Dim suffix As String
+Dim counter As Integer
+
+chr = Mid(gDNA, 4, 2)
+If Right(chr, 1) = "(" Or Right(chr, 1) = ":" Then
+    chr = Left(chr, 1)
+End If
+
+If InStr(1, gDNA, ":g.", vbTextCompare) = 0 Then 'large CNV
+    gStart = Mid(gDNA, InStr(1, gDNA, ":", vbTextCompare) + 1, (Len(gDNA) - InStr(1, gDNA, "-", vbTextCompare)))
+    gEnd = Mid(gDNA, InStr(1, gDNA, "-", vbTextCompare) + 1, (Len(gDNA) - InStr(1, gDNA, "-", vbTextCompare)))
+ElseIf InStr(1, gDNA, ">", vbTextCompare) > 0 Then 'SNV
+    gStart = Mid(gDNA, InStr(1, gDNA, ":g.", vbTextCompare) + 3)
+    gStart = Left(gStart, Len(gStart) - 3)
+    gEnd = gStart
+Else
+    gStart = Mid(gDNA, InStr(1, gDNA, ":g.", vbTextCompare) + 3, InStr(1, gDNA, "_", vbTextCompare))
+    gEnd = gStart
+    gStart = Mid(gStart, 1, InStr(1, gStart, "_", vbTextCompare) - 1)
+    gEnd = Mid(gEnd, InStr(1, gEnd, "_", vbTextCompare) + 1)
+    
+    For counter = 1 To Len(gEnd)
+        If IsNumeric(Mid(gEnd, counter, 1)) = False Then
+            Exit For
+        End If
+    Next
+    
+    suffix = Mid(gEnd, counter)
+    gEnd = Left(gEnd, counter - 1)
+End If
+
+output(1) = chr
+output(2) = gStart
+output(3) = gEnd
+output(4) = suffix
+
+gDna_caller = output
+
+End Function
+
+Function cDNA_caller(cDNA As String) As Variant
+
+If cDNA = "" Then
+    Exit Function
+End If
+
+Dim output(6) As Variant
+Dim nmNo As String
+Dim cStart As String
+Dim cEnd As String
+Dim cRef As String
+Dim cAlt As String
+Dim suffix As String
+Dim counter As Integer
+
+nmNo = Mid(cDNA, 1, InStr(1, cDNA, ":", vbTextCompare) - 1)
+
+If InStr(4, cDNA, "_", vbTextCompare) > 0 Then 'del/ins/dup
+    cStart = Mid(cDNA, InStr(1, cDNA, ":c.", vbTextCompare) + 3, InStr(4, cDNA, "_", vbTextCompare))
+    cEnd = cStart
+    cStart = Mid(cStart, 1, InStr(4, cStart, "_", vbTextCompare) - 1)
+    cEnd = Mid(cEnd, InStr(4, cEnd, "_", vbTextCompare) + 1)
+    
+    For counter = 1 To Len(cEnd)
+        If IsNumeric(Mid(cEnd, counter, 1)) = False Then
+            Exit For
+        End If
+    Next
+    
+    suffix = Mid(cEnd, counter)
+    cEnd = Left(cEnd, counter - 1)
+Else
+    cStart = Mid(cDNA, InStr(1, cDNA, ":c.", vbTextCompare) + 3)
+    For counter = 1 To Len(cStart)
+        If Mid(cStart, counter, 1) = "+" Or Mid(cStart, counter, 1) = "-" Then
+            GoTo NextIteration
+        ElseIf IsNumeric(Mid(cStart, counter, 1)) = False Then
+            Exit For
+        End If
+NextIteration:
+    Next
+    cStart = Left(cStart, counter - 1)
+    cEnd = cStart
+    cRef = Mid(cDNA, InStr(1, cDNA, ">", vbTextCompare) - 1, 1)
+    cAlt = Mid(cDNA, InStr(1, cDNA, ">", vbTextCompare) + 1, 1)
+End If
+
+
+
+output(1) = nmNo
+output(2) = cStart
+output(3) = cEnd
+output(4) = cRef
+output(5) = cAlt
+output(6) = suffix
+
+cDNA_caller = output
+
+End Function
+
+Function aminoAcid_caller(pNom As String) As Variant
+
+'Create amino acid dictionary
+Dim amino_acids As New Scripting.Dictionary
+Dim aa_code3() As Variant
+Dim aa_code1() As Variant
+Dim j As Long
+
+aa_code3 = Array("Ala", "Arg", "Asn", "Asp", "Cys", "Glu", "Gln", "Gly", "His", "Ile", "Leu", "Lys", "Met", "Phe", "Pro", "Ser", "Thr", "Trp", "Tyr", "Val", "*")
+aa_code1 = Array("A", "R", "N", "D", "C", "E", "Q", "G", "H", "I", "L", "K", "M", "F", "P", "S", "T", "W", "Y", "V", "X")
+
+For j = LBound(aa_code3) To UBound(aa_code3)
+    amino_acids.Add Key:=aa_code3(j), Item:=aa_code1(j)
+Next j
+
+
+Dim output() As Variant
+Dim i As Integer
+
+Dim regex As Object, str As String
+Set regex = CreateObject("VBScript.RegExp")
+ 
+With regex
+  .Pattern = "[a-z]{2,}|[0-9]+|[a-z]{2,}"
+  .IgnoreCase = True
+  .Global = True
+End With
+ 
+Set matches = regex.Execute(pNom)
+
+ReDim output(matches.Count) As Variant
+For i = 1 To matches.Count
+    output(i) = matches(i - 1)
+    If i = 1 Or i = 3 Then
+        output(i) = Functions2.AA_3to1(output(i), amino_acids)
+    End If
+Next
+
+aminoAcid_caller = output
+
+End Function
+
+Function variant_details_field()
+'Format variant for the mutation details field
+'GENE p. c.
+
+End Function
+
+Function strFormat(mask As String, ParamArray tokens()) As String
+    Dim i As Long
+    For i = 0 To UBound(tokens)
+        mask = Replace$(mask, "{" & i & "}", tokens(i))
+    Next
+    strFormat = mask
+End Function

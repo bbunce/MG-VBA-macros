@@ -1,0 +1,163 @@
+Attribute VB_Name = "tngs_main"
+Sub tNGS_Starlims_Variants()
+
+Application.ScreenUpdating = False
+Dim wb As Workbook
+Dim ngs_wb As Workbook
+Dim batchNo As String
+
+'Ask user for starlims workbatch number
+Dim starlimsNo As String
+starlimsNo = InputBox("Enter Starlims workbatch number")
+
+'Use sequencing load file to populate import file, match SampleID's
+
+Dim dateMacroRun As String
+Dim fileDate As String
+dateMacroRun = Format(DateTime.Now, "dd/mm/yy")
+fileDate = Format(DateTime.Now, "yyyymmdd")
+
+'Set the default folder path
+'ChDir "X:\Quality Management\Validation folder\Excel Macro\ddPCR"
+
+'Open file
+Dim fileToOpen As String
+Dim fso As New Scripting.FileSystemObject
+
+fileToOpen = Application.GetOpenFilename(Title:="Please choose file to open")
+batchNo = Mid(fileToOpen, (InStr(1, fileToOpen, "_variants", vbTextCompare)) - 4, 4)
+
+If fileToOpen = "False" Then
+    MsgBox "No file selected", vbExclamation, "Sorry!"
+    Exit Sub
+Else
+    Set ngs_wb = Workbooks.Open(Filename:=fileToOpen)
+End If
+
+'Create import file workbook
+Set wb = Workbooks.Add
+wb.SaveAs ("Starlims variant import_" & batchNo)
+
+'Copy starlims import sheet from variant summary workbook to import file and close
+ngs_wb.Sheets("STARLiMS_import").Copy Before:=Workbooks("Starlims variant import_" & batchNo).Sheets(1)
+ngs_wb.Close
+
+
+'Get instrument ID from sequencing load file
+Dim dilFileExit As Boolean
+Dim loadfilePath As String
+Dim loadfileNo As String
+Dim loadfileWB As Workbook
+Dim patients As New Scripting.Dictionary
+Dim loadfilePt As Range
+
+loadfilePath = Dir("X:\Personal folders\Ben Bunce\Projects\tNGS variant import\sequencing load files\PL" & starlimsNo & "*")
+loadfileNo = Mid(loadfilePath, 3, 7)
+Dir ("C:\")
+
+If loadfileNo = "" Then
+    Debug.Print "Can't find file"
+ElseIf loadfileNo = starlimsNo Then
+    Debug.Print "Found it"
+    loadfilePath = "X:\Personal folders\Ben Bunce\Projects\tNGS variant import\sequencing load files\" & loadfilePath
+    Debug.Print loadfilePath
+    Workbooks.Open loadfilePath
+    Set loadfileWB = ActiveWorkbook
+    Set loadfilePt = Range("B6", Range("B" & Cells(Rows.Count, 1).End(xlUp).Row))
+    'Add sampleID's to dictionary (disregard duplicate ids)
+    For Each cell In loadfilePt.Cells
+        On Error Resume Next
+        patients.Add Mid(cell, 1, 9), None
+        On Error GoTo 0
+    Next
+
+    loadfilePt.Copy
+    wb.Activate
+    Worksheets("Sheet1").Range("A3").PasteSpecial (xlPasteValues)
+    loadfileWB.Close
+Else
+    Debug.Print "Something else happened"
+End If
+
+
+'Open import file and create column headers
+wb.Activate
+Worksheets("Sheet1").Activate
+Range("A1").Value = "Warning! Mutation calls outside of GBK/SEQ or conflicting GBK/SEQ, report may not be displayed properly!"
+Range("A2").Value = "Sample Name"
+Range("B2").Value = "Reference Name"
+Range("C2").Value = "Lane Quality"
+Range("D2").Value = "ROI Coverage"
+Range("E2").Value = "# of nts Below Threshold"
+Range("F2").Value = "Quaity (ROI)"
+Range("G2").Value = "Variant1"
+Range("H2").Value = "Variant2"
+Range("I2").Value = "Variant3"
+
+'Create amino acid dictionary
+Dim amino_acids As New Scripting.Dictionary
+Dim aa_code3() As Variant
+Dim aa_code1() As Variant
+Dim j As Long
+
+aa_code3 = Array("Ala", "Arg", "Asn", "Asp", "Cys", "Glu", "Gln", "Gly", "His", "Ile", "Leu", "Lys", "Met", "Phe", "Pro", "Ser", "Thr", "Trp", "Tyr", "Val", "*")
+aa_code1 = Array("A", "R", "N", "D", "C", "E", "Q", "G", "H", "I", "L", "K", "M", "F", "P", "S", "T", "W", "Y", "V", "X")
+
+For j = LBound(aa_code3) To UBound(aa_code3)
+    amino_acids.Add Key:=aa_code3(j), Item:=aa_code1(j)
+Next j
+
+'Create a "mutation details" field varialbe to import using ddPCR import function
+'Create a list of test variants
+'populate "sheet1" with sample id's matches with those imports for the "load file" with variants, multiple variants need to go into seperate columns
+'**Function format_variant(zygosity As String, gNum As String, cNum As String, pNum As String, coding_effect As String, variant_type As String, amino_acids As Dictionary) As String
+
+
+'Need to fix p.? / splicing variants
+
+Dim zygosity, gNum, cNum, pNum, coding_effect, variant_type, amino_acid As String
+
+i = 2
+cellValue = "Something"
+wb.Worksheets("STARLiMS_import").Activate
+
+Do While cellValue <> ""
+    cellValue = Cells(i, 1)
+    
+    If Cells(i, 2) <> "No variant detected" Then
+        On Error Resume Next
+        patients.Add Key:=Cells(i, 1), Item:=Functions.format_variant(Cells(i, 5), Cells(i, 6), Cells(i, 7), Cells(i, 8), Cells(i, 9), Cells(i, 10), amino_acids)
+    End If
+    On Error GoTo 0
+    i = i + 1
+Loop
+
+'Check patient dictionary contents
+'For Each pt In patients
+'    Debug.Print pt, patients(pt)
+'Next
+    
+'Write out formatted varints into custom report sheet ("Sheet1")
+Worksheets("Sheet1").Activate
+i = 3
+cellValue = "something"
+Do While cellValue <> ""
+    For Each pt In patients
+        cellValue = Mid(Cells(i, 1), 1, 9)
+        If pt = cellValue Then
+            If Cells(i, 7).Value = "" Then
+                Cells(i, 7).Value = patients(pt)
+            ElseIf Cells(i, 7).Value <> "" Then
+                Cells(i, 8).Value = patients(pt)
+            ElseIf Cells(i, 8).Value <> "" Then
+                Cells(i, 9).Value = patients(pt)
+            End If
+        End If
+    Next
+    i = i + 1
+Loop
+    
+
+wb.Save
+wb.Close
+End Sub
